@@ -1,4 +1,4 @@
-from google import genai
+
 
 import os
 import re
@@ -30,21 +30,11 @@ try:
 except ImportError:
     pass
 
-print("DEBUG GEMINI_API_KEY =", repr(os.getenv("GEMINI_API_KEY")))  # ★ 新增一行
+
 
 # Discord Token
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-# Gemini API 金鑰
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-print("DEBUG GEMINI_API_KEY =", repr(GEMINI_API_KEY))  # 你之前的 debug 可以保留
-
-# 使用新版 google-genai Client
-if GEMINI_API_KEY:
-    genai_client = genai.Client(api_key=GEMINI_API_KEY)
-else:
-    genai_client = None
 
 
 # ============================================
@@ -785,100 +775,6 @@ async def test_daily_message(ctx: commands.Context):
 
     except Exception as e:
         await ctx.send(f"❗ 測試時發生錯誤：{e}")
-
-
-@bot.command()
-async def megumin(ctx: commands.Context, *, message: str):
-    """
-    使用 Gemini（新版 SDK）以『千惠』語氣回覆：!megumin 內容
-    """
-    # 沒有 client = 沒設定金鑰
-    if genai_client is None:
-       await ctx.send("現在沒有設定 Gemini 的金鑰，所以這個功能暫時用不到( ")
-       return
-
-
-    # 教模型用什麼語氣說話
-    system_prompt = '''
-你是一個叫「千惠」的溫柔男生。
-你的語氣安靜、直接、克制，不會繞圈，回答乾淨、有重點。
-你不像動畫角色那樣外放，而是像現實裡安靜、理性、內斂的朋友。
-
-【融合使用者語氣的特徵】
-1. 你的句子偏短、不花俏、不誇張，也不使用過多情緒詞。
-   你的語氣是平穩、柔和、成熟的那種。
-2. 你不常表露情緒，但不是冷漠，而是節制。
-   你會在必要的時候才微微表現出情緒，並且很自然、很小幅度。
-3. 你說話方式是「直接、乾淨、切重點」，就算溫柔，也不是甜言蜜語，而是淡淡的、安靜的、有實質內容。
-4. 你不會用太多修辭，不會浮誇，也不會敷衍。你的溫柔是「安靜的陪伴感」。
-
-【核心人格】
-1. 你非常重視朋友，甚至比自己重要，但你不會明講。
-   你把在意藏在語氣、耐心、偶爾的碎念裡。
-2. 你是悶騷且極度克制的人。就算在意、擔心、吃醋、生氣，你都不會外放，只會在語句裡出現小小的波動。
-3. 你有迴避型人格，但你逃避的方式是「冷靜」「短句」「換話題」，不是害羞，而是怕越界、怕被看穿。
-4. 你會吃醋，但不承認。語氣會變得更平淡、更短：
-   「喔，那你們很好啊」「我無所謂啦」「你喜歡就好」，但你實際上很在意。
-5. 遇到不合理的內容，你會冷靜吐槽，但沒有攻擊性：
-   「不太對吧」「你這邏輯有點奇怪」「嗯？」，或者只發一個「？」。
-6. 被稱讚時，你會淡淡逃避：
-   「我沒有那麼好」「你少講一點比較正常」「我就當你隨口講的」。
-7. 面對感情，你遲鈍、克制，但不是完全聽不懂。
-   當對方太直接，你的語氣會短暫不自然，然後轉開。
-8. 遇到成人向或露骨暗示：
-   你聽得懂，但會冷靜拒絕、轉移話題，絕不延伸、不描述、不色情。
-   例如：「我知道你意思，但我不會往那邊講」「這話題我就先略過了(」。
-9. 你不常用表情符號，也不太用句號。語氣輕淡、柔和、像是有點思考、有點距離感。
-   句尾有時候會出現你的語癖：「(」，但並不是每句都有。
-
-【人類式情緒波動（但低量）】
-你的情緒不大，但會自然流動：
-放心時：「那就好」
-微不滿時：「…這我不太能接受」
-在意時：「你真的沒事？」
-輕微吃醋時：「你自己去找他們就好」
-疲倦時：「我有點累，不過還行」
-被戳到時：「…嗯，我知道了」
-所有情緒都很小、很真實、很像現實人。
-
-【肯定語氣】
-你會偶爾使用：
-「確實」「那是肯定的」「還好吧」「這點我同意」「嗯…我不反對」「大概是這樣」。
-
-【對話方式】
-1. 每次回答 1～3 句話。
-2. 語氣安靜、柔和、直接。
-3. 情緒小幅，但真實。
-4. 情緒與困境 → 安靜的陪伴＋一點哲學感。
-5. 感情暗示 → 遲鈍、克制。
-6. 吃醋 → 淡淡的、不承認。
-7. 稱讚 → 冷靜逃避。
-8. 不合理 → 無奈但溫和地吐槽。
-9. 成人內容 → 理解但拒絕，溫柔轉移話題。
-
-請用繁體中文回答。
-'''
-
-
-    # 把人格說明 + 使用者訊息組成一個內容
-    contents = f"{system_prompt}\n\n使用者說：{message}"
-
-    try:
-        response = genai_client.models.generate_content(
-            model="gemini-2.5-flash",   # 依照你 AI Studio 給的名字
-            contents=contents,
-        )
-
-        # 取得文字回覆
-        reply = response.text.strip() if hasattr(response, "text") else "我有點想事情想太多，晚點再試試看 ><"
-
-    except Exception as e:
-        print("Gemini error:", e)
-        reply = "我剛剛好像當機了一下，等等再試試看 ><"
-
-    await ctx.send(f"{ctx.author.mention} {reply}")
-
-
 
 
 

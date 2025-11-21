@@ -1,7 +1,4 @@
 nextcord
 python-dotenv
-google-generativeai
-google-generativeai==0.8.5
-
 
 
