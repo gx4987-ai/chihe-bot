@@ -1,13 +1,20 @@
-
+from google import genai
 
 import os
 import re
 import random
+
+import json
+
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Tuple, Optional
 
 import nextcord
 from nextcord.ext import commands, tasks
+
+from nextcord.ui import View, button
+from nextcord import SlashOption
+
 
 # ---- Intents / Bot ----
 intents = nextcord.Intents.default()
@@ -30,11 +37,21 @@ try:
 except ImportError:
     pass
 
-
+print("DEBUG GEMINI_API_KEY =", repr(os.getenv("GEMINI_API_KEY")))  # ★ 新增一行
 
 # Discord Token
 TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Gemini API 金鑰
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+print("DEBUG GEMINI_API_KEY =", repr(GEMINI_API_KEY))  # 你之前的 debug 可以保留
+
+# 使用新版 google-genai Client
+if GEMINI_API_KEY:
+    genai_client = genai.Client(api_key=GEMINI_API_KEY)
+else:
+    genai_client = None
 
 
 # ============================================
@@ -107,13 +124,36 @@ def detect_negative_emotion(text: str) -> bool:
     return any(kw.lower() in lower for kw in NEGATIVE_KEYWORDS)
 
 
-# ====== 關鍵字自動回覆設定 ======
 
-TIME_KEYWORD_REPLIES: Dict[str, str] = {
-    "早安": "早安，你今天還好吧( ",
-    "午安": "午安，記得稍微休息一下，別讓自己太緊( ",
-    "晚安": "晚安，今天辛苦到這裡也夠了，好好睡一下吧( "
-}
+
+async def try_greeting_reply(message: nextcord.Message):
+    """處理早安/午安/晚安的安靜冷卻模式"""
+    global greeting_last_trigger
+
+    now = time.time()
+    content = message.content
+
+    # --- 早安 ---
+    if any(word in content for word in GOOD_MORNING_WORDS):
+        if now - greeting_last_trigger["morning"] >= GREETING_COOLDOWN:
+            greeting_last_trigger["morning"] = now
+            await message.reply("早安，你今天還好吧( ")
+        return  # 冷卻中 → 完全安靜，不回覆
+
+    # --- 午安 ---
+    if any(word in content for word in GOOD_AFTERNOON_WORDS):
+        if now - greeting_last_trigger["noon"] >= GREETING_COOLDOWN:
+            greeting_last_trigger["noon"] = now
+            await message.reply("午安，記得稍微休息一下( ")
+        return
+
+    # --- 晚安 ---
+    if any(word in content for word in GOOD_NIGHT_WORDS):
+        if now - greeting_last_trigger["night"] >= GREETING_COOLDOWN:
+            greeting_last_trigger["night"] = now
+            await message.reply("晚安，好好睡一下會比較舒服( ")
+        return
+
 
 EMOTION_KEYWORD_REPLIES: Dict[str, str] = {
     "好累": "聽起來是真的有點撐太久了，你要不要先停一下喘口氣，再慢慢跟我講發生什麼事( ",
@@ -168,6 +208,284 @@ LAST_EXPEDITION_TIME_USER: Dict[int, float] = {}  # {user_id: timestamp}
 
 # 使用者累計傷害統計表 {user_id: total_damage}
 USER_DAMAGE_TOTAL: Dict[int, int] = {}
+
+# ====== 真心話大冒險 & 故事接龍 狀態 ======
+# 以頻道為單位管理
+
+# 真心話大冒險：{channel_id: set(user_id)}
+TOD_PLAYERS: Dict[int, set[int]] = {}
+
+# 故事接龍：
+# - STORY_PLAYERS: {channel_id: [user_id1, user_id2, ...]} 固定順序
+# - STORY_SENTENCES: {channel_id: {user_id: sentence}}
+# - STORY_CURRENT_INDEX: {channel_id: int} 目前輪到第幾個玩家（索引）
+STORY_PLAYERS: Dict[int, list[int]] = {}
+STORY_SENTENCES: Dict[int, Dict[int, str]] = {}
+STORY_CURRENT_INDEX: Dict[int, int] = {}
+
+
+# ============================================
+# 千惠模組包：記憶系統 / 生活化數據 / 反應包 / 早午晚安安靜冷卻 / 每日任務
+# ============================================
+
+# ---------- 1. 千惠記憶系統（輕量 JSON） ----------
+
+MEMORY_FILE = "chihye_memory.json"
+MEMORY: Dict[str, dict] = {}  # 結構：{"users": {"user_id_str": {"notes": [...], "updated_at": "..."} }}
+
+
+def load_memory() -> None:
+    """啟動時讀取記憶檔，讀不到就用空的。"""
+    global MEMORY
+    try:
+        with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+            MEMORY = json.load(f)
+            if "users" not in MEMORY:
+                MEMORY["users"] = {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        MEMORY = {"users": {}}
+
+
+def save_memory() -> None:
+    """寫回記憶檔。"""
+    try:
+        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(MEMORY, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print("save_memory error:", e)
+
+
+def add_user_note(user_id: int, note: str) -> None:
+    """幫某個人多記一則小語錄 / 心情 / 喜歡的東西。"""
+    if not note:
+        return
+    uid = str(user_id)
+    users = MEMORY.setdefault("users", {})
+    user_mem = users.setdefault(uid, {})
+    notes = user_mem.setdefault("notes", [])
+    notes.append(note.strip())
+    # 最多留 20 則，太久以前的就丟掉
+    if len(notes) > 20:
+        notes.pop(0)
+    user_mem["updated_at"] = datetime.now(TAIPEI_TZ).isoformat(timespec="seconds")
+    save_memory()
+
+
+def get_user_notes(user_id: int):
+    uid = str(user_id)
+    return MEMORY.get("users", {}).get(uid, {}).get("notes", [])
+
+
+# ---------- 2. 生活化「伺服器小報告」統計 ----------
+
+USER_MESSAGE_COUNT: Dict[int, int] = {}         # 每個人總訊息數
+USER_NIGHT_MESSAGE_COUNT: Dict[int, int] = {}   # 每個人深夜訊息數
+CHANNEL_MESSAGE_COUNT: Dict[int, int] = {}      # 每個頻道訊息數
+
+
+def update_message_stats(message: nextcord.Message) -> None:
+    """在 on_message 裡每次呼叫，更新生活化統計。"""
+    uid = message.author.id
+    chid = message.channel.id
+
+    USER_MESSAGE_COUNT[uid] = USER_MESSAGE_COUNT.get(uid, 0) + 1
+    CHANNEL_MESSAGE_COUNT[chid] = CHANNEL_MESSAGE_COUNT.get(chid, 0) + 1
+
+    if is_night_mode():
+        USER_NIGHT_MESSAGE_COUNT[uid] = USER_NIGHT_MESSAGE_COUNT.get(uid, 0) + 1
+
+
+@bot.command(name="小報告")
+async def life_report(ctx: commands.Context):
+    """千惠的伺服器生活化小報告。"""
+    if not USER_MESSAGE_COUNT:
+        await ctx.send("我這邊的觀察紀錄還太少，再陪我聊久一點，我再跟你們報告( ")
+        return
+
+    # Top talker
+    top_talkers = sorted(
+        USER_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True
+    )[:5]
+
+    # 深夜 Top
+    top_night = sorted(
+        USER_NIGHT_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True
+    )[:3]
+
+    # 頻道最吵
+    top_channels = sorted(
+        CHANNEL_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True
+    )[:3]
+
+    embed = nextcord.Embed(
+        title="📝 千惠的小報告",
+        description="我這陣子偷看的觀察紀錄( ",
+        color=0xF5B642,
+    )
+
+    if top_talkers:
+        lines = []
+        for i, (uid, cnt) in enumerate(top_talkers, start=1):
+            lines.append(f"{i}. <@{uid}>：**{cnt}** 則訊息")
+        embed.add_field(name="說話最多的人", value="\n".join(lines), inline=False)
+
+    if top_night:
+        lines = []
+        for i, (uid, cnt) in enumerate(top_night, start=1):
+            lines.append(f"{i}. <@{uid}>：**{cnt}** 則深夜訊息")
+        embed.add_field(name="深夜還不睡的人", value="\n".join(lines), inline=False)
+
+    if top_channels:
+        lines = []
+        for i, (chid, cnt) in enumerate(top_channels, start=1):
+            lines.append(f"{i}. <#{chid}>：**{cnt}** 則訊息")
+        embed.add_field(name="最吵的地方", value="\n".join(lines), inline=False)
+
+    await ctx.send(embed=embed)
+
+
+# ---------- 3. 千惠可愛反應包（輕量版） ----------
+
+REACTION_TRIGGERS = {
+    "我回來": [
+        "嗯，歡迎回來( ",
+        "你回來了喔，那就先在這裡坐一下吧( ",
+    ],
+    "好無聊": [
+        "那要不要玩點什麼？我這邊有一些奇怪的遊戲可以試試看( ",
+        "無聊到跑來找我，其實我有一點開心( ",
+    ],
+    "肚子餓": [
+        "那就先去吃東西，聊天可以等，肚子不能等( ",
+        "餓著的時候什麼都會變得更煩，先填飽肚子再說( ",
+    ],
+    "我好冷": [
+        "那你多穿一點，或者縮在被子裡，手機可以拿遠一點沒關係( ",
+        "冷的時候會特別想有人在旁邊，我暫時先算半個( ",
+    ],
+}
+
+REACTION_COOLDOWN_PER_USER = 60  # 秒，避免一個人一直觸發
+REACTION_LAST_TIME: Dict[int, float] = {}
+
+
+async def handle_reaction_reply(message: nextcord.Message, now_ts: float) -> bool:
+    """可愛反應包：簡單掃關鍵詞，偶爾回一句。回傳是否有回覆。"""
+    # 只在主要聊天頻道開啟
+    if message.channel.id not in (CHAT_CHANNEL_ID, DAILY_CHANNEL_ID):
+        return False
+
+    uid = message.author.id
+    text = message.content
+
+    # 簡單防洗：每人 60 秒一次
+    last = REACTION_LAST_TIME.get(uid, 0.0)
+    if now_ts - last < REACTION_COOLDOWN_PER_USER:
+        return False
+
+    for kw, replies in REACTION_TRIGGERS.items():
+        if kw in text:
+            reply = random.choice(replies)
+            # 深夜稍微柔一點
+            if is_night_mode():
+                reply = reply.replace("？", "…？")
+            await message.channel.send(f"{message.author.mention} {reply}")
+            REACTION_LAST_TIME[uid] = now_ts
+            return True
+
+    return False
+
+
+# ---------- 4. 早安 / 午安 / 晚安：2 小時安靜冷卻 ----------
+
+GREETING_COOLDOWN = 7200  # 2 小時
+GREETING_LAST_TIME: Dict[str, float] = {
+    "早安": 0.0,
+    "午安": 0.0,
+    "晚安": 0.0,
+}
+
+
+async def handle_greeting_if_any(message: nextcord.Message) -> bool:
+    """
+    專門處理早安/午安/晚安：
+    - 第一個人觸發 → 正常回覆
+    - 之後 2 小時內 → 完全安靜，不回覆、不提示冷卻
+    回傳：有沒有真的回覆。
+    """
+    content = message.content
+    now_ts = datetime.now().timestamp()
+
+    for kw, base_reply in TIME_KEYWORD_REPLIES.items():
+        if is_keyword_triggered(kw, content):
+            last_ts = GREETING_LAST_TIME.get(kw, 0.0)
+            if now_ts - last_ts >= GREETING_COOLDOWN:
+                reply_text = base_reply
+                # 深夜版語氣
+                if is_night_mode():
+                    reply_text = random.choice(NIGHT_MODE_REPLIES["neutral"])
+                await message.channel.send(f"{message.author.mention} {reply_text}")
+                GREETING_LAST_TIME[kw] = now_ts
+                return True
+            else:
+                # 在冷卻中 → 什麼都不說
+                return False
+    return False
+
+
+# ---------- 5. 每日任務（今日小任務） ----------
+
+DAILY_MISSIONS = [
+    "今天找一個時間，認真喝完一整杯水。",
+    "刻意對某個人說一句『謝謝』，哪怕只是很小的事。",
+    "允許自己發呆三分鐘，什麼都不做也可以。",
+    "把手機放下五分鐘，只聽一下周圍的聲音。",
+    "跟一個人說『辛苦了』，不一定要解釋原因。",
+    "睡前對自己說一句『今天這樣就夠了』。",
+]
+
+
+def get_mission_for_today() -> str:
+    today_str = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d")
+    # 用日期字串做一個穩定的 index，避免每天重啟任務亂跳
+    idx = sum(ord(c) for c in today_str) % len(DAILY_MISSIONS)
+    return DAILY_MISSIONS[idx]
+
+
+@bot.command(name="mission", aliases=["今日任務", "任務"])
+async def mission_cmd(ctx: commands.Context):
+    m = get_mission_for_today()
+    await ctx.send(f"{ctx.author.mention} 今天的任務是：{m}")
+
+
+# ---------- 6. 記錄小語錄的指令 ----------
+
+@bot.command(name="記錄", aliases=["記一下", "記", "紀錄"])
+async def remember_cmd(ctx: commands.Context, *, text: str):
+    """幫你把一句話記起來，之後可以用 !語錄 看。"""
+    add_user_note(ctx.author.id, text)
+    await ctx.send(f"{ctx.author.mention} 好，我記得了( ")
+
+
+@bot.command(name="語錄", aliases=["小語錄"])
+async def show_notes_cmd(ctx: commands.Context):
+    """顯示你自己記錄過的幾句話。"""
+    notes = get_user_notes(ctx.author.id)
+    if not notes:
+        await ctx.send(f"{ctx.author.mention} 你目前還沒有跟我說要記住什麼東西( ")
+        return
+
+    # 只顯示最後 5 則
+    last_notes = notes[-5:]
+    lines = [f"{i}. {t}" for i, t in enumerate(last_notes, start=1)]
+    await ctx.send(
+        f"{ctx.author.mention} 這是我記得、跟你有關的幾句話：\n" + "\n".join(lines)
+    )
+
+
+# 啟動時就先把記憶載進來
+load_memory()
+
 
 
 def get_expedition_comment(damage: int) -> str:
@@ -247,10 +565,7 @@ def get_expedition_comment(damage: int) -> str:
             "這數字根本就不是辦家家酒呢，我應該會認真開始考慮防守你這方向( ",
         ]
 
-    elif damage := 9999:    
-        pool = [
-            "嗚...稍微有點痛..."
-        ]
+  
 
     # 接近滿傷害：9000～10000，精神狀況關心版
     else:
@@ -330,76 +645,96 @@ async def on_message(message: nextcord.Message):
     global LAST_REPLY_TIME, LAST_HINT_TIME, MUTE_UNTIL, ABUSE_HINT_COUNT, LAST_EMOTION_REPLY_TIME
 
     content = message.content
-    now = datetime.now().timestamp()
+    now_ts = datetime.now().timestamp()
+
+    # 生活化統計（小報告用）
+    update_message_stats(message)
 
     responded = False  # 這次訊息 bot 有沒有已經回覆過
 
-    # ✅ 在「每日頻道 + 聊天頻道」都啟用關鍵字功能
+    # ✅ 在「每日頻道 + 聊天頻道」啟用這些互動功能
     if message.channel.id in (CHAT_CHANNEL_ID, DAILY_CHANNEL_ID):
-        combined_replies: Dict[str, str] = {}
-        combined_replies.update(TIME_KEYWORD_REPLIES)
-        combined_replies.update(EMOTION_KEYWORD_REPLIES)
 
-        for keyword, reply_text in combined_replies.items():
-            if is_keyword_triggered(keyword, content):
-                user_key = (keyword, message.author.id)
+        # 1) 先處理早安/午安/晚安（2 小時安靜冷卻，不會出現冷卻提示）
+        if await handle_greeting_if_any(message):
+            responded = True
 
-                # 🌙 深夜模式：先根據關鍵字換成深夜版語氣
-                if is_night_mode():
-                    if keyword in ["好累", "好煩", "壓力好大", "不想動", "不想念書"]:
-                        reply_text = random.choice(NIGHT_MODE_REPLIES["tired"])
-                    elif keyword in ["早安", "午安", "晚安"]:
-                        reply_text = random.choice(NIGHT_MODE_REPLIES["neutral"])
+        # 2) 其他情緒關鍵字（好累、抱抱、草…），沿用你原本的冷卻 + 反洗版邏輯
+        if not responded:
+            for keyword, reply_text in EMOTION_KEYWORD_REPLIES.items():
+                if is_keyword_triggered(keyword, content):
+                    user_key = (keyword, message.author.id)
 
-                # 1️⃣ 先看這個人有沒有被封印
-                mute_until = MUTE_UNTIL.get(user_key, 0)
-                if now < mute_until:
+                    # 🌙 深夜模式：先根據關鍵字換成深夜版語氣
+                    if is_night_mode():
+                        if keyword in ["好累", "好煩", "壓力好大", "不想動", "不想念書"]:
+                            reply_text = random.choice(NIGHT_MODE_REPLIES["tired"])
+
+                    # 1️⃣ 看這個人有沒有被封印
+                    mute_until = MUTE_UNTIL.get(user_key, 0)
+                    if now_ts < mute_until:
+                        break
+
+                    # 2️⃣ 檢查這個關鍵字的全局冷卻
+                    last_time = LAST_REPLY_TIME.get(keyword, 0)
+                    elapsed = now_ts - last_time
+
+                    if elapsed < KEYWORD_COOLDOWN:
+                        last_hint = LAST_HINT_TIME.get(user_key, 0)
+                        if now_ts - last_hint >= HINT_COOLDOWN_PER_USER:
+                            LAST_HINT_TIME[user_key] = now_ts
+
+                            count = ABUSE_HINT_COUNT.get(user_key, 0) + 1
+                            ABUSE_HINT_COUNT[user_key] = count
+
+                            if count < ABUSE_MAX_HINTS:
+                                remain = int(KEYWORD_COOLDOWN - elapsed)
+                                await message.channel.send(
+                                    f"{message.author.mention} 這個關鍵字還在冷卻中，大概 {remain} 秒之後再試比較好( "
+                                )
+                            else:
+                                MUTE_UNTIL[user_key] = now_ts + ABUSE_MUTE_SECONDS
+                                await message.channel.send(
+                                    f"{message.author.mention} 你這樣有點太頻繁了，不然先停一下吧( "
+                                )
+                        break
+
+                    # 3️⃣ 不在冷卻 → 正常回覆
+                    await message.channel.send(f"{message.author.mention} {reply_text}")
+                    LAST_REPLY_TIME[keyword] = now_ts
+                    ABUSE_HINT_COUNT[user_key] = 0
+                    responded = True
                     break
 
-                # 2️⃣ 檢查這個關鍵字的全局冷卻
-                last_time = LAST_REPLY_TIME.get(keyword, 0)
-                elapsed = now - last_time
-
-                if elapsed < KEYWORD_COOLDOWN:
-                    last_hint = LAST_HINT_TIME.get(user_key, 0)
-                    if now - last_hint >= HINT_COOLDOWN_PER_USER:
-                        LAST_HINT_TIME[user_key] = now
-
-                        count = ABUSE_HINT_COUNT.get(user_key, 0) + 1
-                        ABUSE_HINT_COUNT[user_key] = count
-
-                        if count < ABUSE_MAX_HINTS:
-                            remain = int(KEYWORD_COOLDOWN - elapsed)
-                            await message.channel.send(
-                                f"{message.author.mention} 這個關鍵字還在冷卻中，大概 {remain} 秒之後再試比較好( "
-                            )
-                        else:
-                            MUTE_UNTIL[user_key] = now + ABUSE_MUTE_SECONDS
-                            await message.channel.send(
-                                f"{message.author.mention} 你這樣有點太頻繁了，不然先停一下吧( "
-                            )
-                    break
-
-                # 3️⃣ 不在冷卻 → 正常回覆（已考慮深夜模式）
-                await message.channel.send(f"{message.author.mention} {reply_text}")
-                LAST_REPLY_TIME[keyword] = now
-                ABUSE_HINT_COUNT[user_key] = 0
-                responded = True
-                break
-
-        # 進階情緒偵測：只有在「還沒因為關鍵字回覆」時才啟動
+        # 3) 進階情緒偵測：只有在「還沒因為關鍵字回覆」時才啟動
         if (not responded) and detect_negative_emotion(content):
             last_emote = LAST_EMOTION_REPLY_TIME.get(message.author.id, 0)
-            if now - last_emote >= EMOTION_COOLDOWN_PER_USER:
+            if now_ts - last_emote >= EMOTION_COOLDOWN_PER_USER:
                 if is_night_mode():
                     reply = random.choice(NIGHT_MODE_REPLIES["comfort"])
                 else:
                     reply = random.choice(EMOTION_RESPONSES)
-                await message.channel.send(f"{message.author.mention} {reply}")
-                LAST_EMOTION_REPLY_TIME[message.author.id] = now
+
+                # 如果這個人有自己記錄過小語錄，就順便提一下
+                notes = get_user_notes(message.author.id)
+                extra = ""
+                if notes:
+                    last_note = notes[-1]
+                    extra = f"\n還記得你之前跟我說過：「{last_note}」"
+
+                await message.channel.send(f"{message.author.mention} {reply}{extra}")
+                LAST_EMOTION_REPLY_TIME[message.author.id] = now_ts
+                responded = True
+
+        # 4) 可愛反應包（如果前面都沒回覆，就試試看）
+        if not responded:
+            reacted = await handle_reaction_reply(message, now_ts)
+            if reacted:
+                responded = True
 
     # 讓其他指令（!xxx）正常運作
     await bot.process_commands(message)
+
 
 
 
@@ -529,6 +864,370 @@ async def expedition_rank(ctx: commands.Context):
             )
 
     await ctx.send(embed=embed)
+
+
+class TodView(View):
+    """真心話大冒險控制台用的按鈕 View"""
+
+    def __init__(self, channel_id: int):
+        super().__init__(timeout=None)
+        self.channel_id = channel_id
+
+    @button(label="加入遊戲", style=nextcord.ButtonStyle.blurple)
+    async def join_button(self, _: nextcord.ui.Button, interaction: nextcord.Interaction):
+        channel_id = self.channel_id
+        players = TOD_PLAYERS.setdefault(channel_id, set())
+
+        if interaction.user.id in players:
+            await interaction.response.send_message("你已經在這輪名單裡了( ", ephemeral=True)
+        else:
+            players.add(interaction.user.id)
+            await interaction.response.send_message("我幫你加進真心話大冒險了( ", ephemeral=True)
+
+    @button(label="退出遊戲", style=nextcord.ButtonStyle.gray)
+    async def leave_button(self, _: nextcord.ui.Button, interaction: nextcord.Interaction):
+        channel_id = self.channel_id
+        players = TOD_PLAYERS.setdefault(channel_id, set())
+
+        if interaction.user.id in players:
+            players.remove(interaction.user.id)
+            await interaction.response.send_message("好，我先把你從這輪名單裡拿掉( ", ephemeral=True)
+        else:
+            await interaction.response.send_message("你本來就不在這輪名單裡( ", ephemeral=True)
+
+    @button(label="查看玩家", style=nextcord.ButtonStyle.gray)
+    async def list_button(self, _: nextcord.ui.Button, interaction: nextcord.Interaction):
+        channel_id = self.channel_id
+        players = TOD_PLAYERS.get(channel_id, set())
+
+        if not players:
+            await interaction.response.send_message("目前還沒有人加入這輪真心話大冒險( ", ephemeral=True)
+            return
+
+        mentions = [f"<@{uid}>" for uid in players]
+        text = "這一輪的玩家：\n" + "\n".join(mentions)
+        await interaction.response.send_message(text, ephemeral=True)
+
+    @button(label="下一回合", style=nextcord.ButtonStyle.green)
+    async def next_round_button(self, _: nextcord.ui.Button, interaction: nextcord.Interaction):
+        channel_id = self.channel_id
+        players = TOD_PLAYERS.get(channel_id, set())
+
+        # 只有「有加入的玩家」可以按
+        if interaction.user.id not in players:
+            await interaction.response.send_message("你目前沒有加入這輪，不能幫大家抽下一回合( ", ephemeral=True)
+            return
+
+        if len(players) < 2:
+            await interaction.response.send_message("至少要兩個人加入才有辦法抽出題者跟被懲罰者( ", ephemeral=True)
+            return
+
+        player_list = list(players)
+        questioner = random.choice(player_list)
+
+        # 被懲罰者不能跟出題者同一個人
+        possible_targets = [uid for uid in player_list if uid != questioner]
+        target = random.choice(possible_targets)
+
+        embed = nextcord.Embed(
+            title="🎲 真心話大冒險 - 本回合結果",
+            color=0x57F287,  # 綠色系
+        )
+        embed.add_field(name="出題者", value=f"<@{questioner}>", inline=True)
+        embed.add_field(name="被懲罰者", value=f"<@{target}>", inline=True)
+        embed.set_footer(text="出題者可以決定是真心話還是大冒險( ")
+
+        # 公開公告在頻道裡
+        await interaction.response.send_message(embed=embed)
+
+
+@bot.command(name="tod", aliases=["真心話大冒險"])
+async def truth_or_dare(ctx: commands.Context):
+    """
+    真心話大冒險控制台：
+    - 按鈕加入/退出
+    - 查看目前玩家
+    - 下一回合：隨機抽出題者與被懲罰者
+    """
+    channel_id = ctx.channel.id
+    # 每次開一個新的控制台時，不會清掉舊玩家，方便連續玩
+    TOD_PLAYERS.setdefault(channel_id, set())
+
+    embed = nextcord.Embed(
+        title="🎲 真心話大冒險 控制台",
+        description=(
+            "・按「加入遊戲」就會被加進這一輪名單\n"
+            "・按「退出遊戲」可以先離開\n"
+            "・按「查看玩家」可以看到目前名單\n"
+            "・只有有加入的人可以按「下一回合」\n\n"
+            "按下「下一回合」後，會從名單裡抽一個出題者，"
+            "再抽一個被懲罰者，並在頻道公告結果( "
+        ),
+        color=0xF5B642,
+    )
+
+    view = TodView(channel_id=channel_id)
+    await ctx.send(embed=embed, view=view)
+
+
+class StoryView(View):
+    """故事接龍控制台用的按鈕 View"""
+
+    def __init__(self, channel_id: int):
+        super().__init__(timeout=None)
+        self.channel_id = channel_id
+
+    @button(label="加入故事", style=nextcord.ButtonStyle.blurple)
+    async def join_button(self, _: nextcord.ui.Button, interaction: nextcord.Interaction):
+        channel_id = self.channel_id
+        players = STORY_PLAYERS.setdefault(channel_id, [])
+
+        if interaction.user.id in players:
+            await interaction.response.send_message("你已經在這輪故事接龍名單裡了( ", ephemeral=True)
+            return
+
+        players.append(interaction.user.id)
+        await interaction.response.send_message("好，我把你加進故事接龍這一輪了( ", ephemeral=True)
+
+    @button(label="退出故事", style=nextcord.ButtonStyle.gray)
+    async def leave_button(self, _: nextcord.ui.Button, interaction: nextcord.Interaction):
+        channel_id = self.channel_id
+        players = STORY_PLAYERS.setdefault(channel_id, [])
+
+        if interaction.user.id in players:
+            players.remove(interaction.user.id)
+            # 如果退出的人剛好是之後索引的人，就讓 index 自動調整一下
+            idx = STORY_CURRENT_INDEX.get(channel_id, 0)
+            if idx >= len(players):
+                STORY_CURRENT_INDEX[channel_id] = max(0, len(players) - 1)
+            await interaction.response.send_message("好，我先把你從這輪裡拿掉( ", ephemeral=True)
+        else:
+            await interaction.response.send_message("你本來就不在這輪故事裡( ", ephemeral=True)
+
+    @button(label="查看玩家", style=nextcord.ButtonStyle.gray)
+    async def list_button(self, _: nextcord.ui.Button, interaction: nextcord.Interaction):
+        channel_id = self.channel_id
+        players = STORY_PLAYERS.get(channel_id, [])
+
+        if not players:
+            await interaction.response.send_message("目前還沒有人加入故事接龍( ", ephemeral=True)
+            return
+
+        mentions = [f"<@{uid}>" for uid in players]
+        text = "這一輪的順序是：\n" + "\n".join(
+            f"{i+1}. {m}" for i, m in enumerate(mentions)
+        )
+        await interaction.response.send_message(text, ephemeral=True)
+
+    @button(label="下一位", style=nextcord.ButtonStyle.green)
+    async def next_turn_button(self, _: nextcord.ui.Button, interaction: nextcord.Interaction):
+        channel_id = self.channel_id
+        players = STORY_PLAYERS.get(channel_id, [])
+
+        # 只有有加入的玩家可以按
+        if interaction.user.id not in players:
+            await interaction.response.send_message("你沒有加入這輪故事接龍，不能幫大家推進( ", ephemeral=True)
+            return
+
+        if not players:
+            await interaction.response.send_message("這裡目前還沒有任何玩家，沒辦法進行( ", ephemeral=True)
+            return
+
+        # 目前輪到第幾個
+        idx = STORY_CURRENT_INDEX.get(channel_id, 0)
+
+        # 如果 index 等於玩家數量代表已經跑完一輪，可以結算
+        if idx >= len(players):
+            sentences_map = STORY_SENTENCES.get(channel_id, {})
+            if not sentences_map or len(sentences_map) < len(players):
+                await interaction.response.send_message(
+                    "看起來還有人沒造句完，先等全部人都用 /story_write 之後再按結算比較好( ",
+                    ephemeral=True,
+                )
+                return
+
+            # 結算：依照玩家順序列出句子
+            lines = []
+            story_parts = []
+            for i, uid in enumerate(players, start=1):
+                sentence = sentences_map.get(uid, "（這個人沒有寫東西）")
+                lines.append(f"{i}. <@{uid}>：{sentence}")
+                story_parts.append(sentence)
+
+            full_story = " ".join(story_parts) if story_parts else "（沒內容）"
+
+            embed = nextcord.Embed(
+                title="📖 故事接龍 - 本輪故事結算",
+                color=0x5865F2,
+            )
+            embed.add_field(
+                name="每個人的句子",
+                value="\n".join(lines),
+                inline=False,
+            )
+            embed.add_field(
+                name="組合起來的完整故事",
+                value=full_story,
+                inline=False,
+            )
+            embed.set_footer(text="故事接龍結束，如果要再玩一輪可以繼續用這個控制台( ")
+
+            # 公開結算
+            await interaction.response.send_message(embed=embed)
+
+            # 重置這一輪的進度 & 內容，但保留玩家順序方便再玩一輪
+            STORY_SENTENCES[channel_id] = {}
+            STORY_CURRENT_INDEX[channel_id] = 0
+            return
+
+        # 還在一輪中，宣布現在輪到誰
+        current_user_id = players[idx]
+        mention = f"<@{current_user_id}>"
+
+        msg = (
+            f"現在輪到 {mention} 造句了。\n\n"
+            "・你可以先使用 `/story_prev` 來查看「上一位玩家」的內容\n"
+            "・再使用 `/story_write 句子: ...` 來寫下你要接的那一句\n\n"
+            "其他人看不到內容，只有當這一輪全部跑完後才會結算出完整故事( "
+        )
+
+        await interaction.response.send_message(msg)
+
+
+@bot.command(name="story", aliases=["故事接龍"])
+async def story_game(ctx: commands.Context):
+    """
+    故事接龍控制台：
+    - 按鈕加入/退出/查看玩家/下一位
+    - 造句用 /story_prev + /story_write
+    """
+    channel_id = ctx.channel.id
+
+    # 如果首次建立此頻道的故事資料，就初始化
+    STORY_PLAYERS.setdefault(channel_id, [])
+    STORY_SENTENCES.setdefault(channel_id, {})
+    STORY_CURRENT_INDEX.setdefault(channel_id, 0)
+
+    embed = nextcord.Embed(
+        title="📖 故事接龍 控制台",
+        description=(
+            "・按「加入故事」來加入這一輪故事接龍\n"
+            "・按「退出故事」可以先離開\n"
+            "・按「查看玩家」可以看目前輪到順序\n"
+            "・按「下一位」會宣布目前輪到誰造句\n\n"
+            "輪到你的時候：\n"
+            "1. 用 `/story_prev` 看上一位玩家的句子\n"
+            "2. 再用 `/story_write 句子: ...` 來寫下你的句子\n\n"
+            "只有輪到的那個人看得到上一句，大家的內容會在整輪結束後一次公布( "
+        ),
+        color=0x5865F2,
+    )
+
+    view = StoryView(channel_id=channel_id)
+    await ctx.send(embed=embed, view=view)
+
+
+@bot.slash_command(
+    name="story_prev",
+    description="查看上一位玩家的句子（只有輪到你時才能看）",
+)
+async def story_prev(interaction: nextcord.Interaction):
+    channel = interaction.channel
+    if channel is None:
+        await interaction.response.send_message("這個指令只能在文字頻道裡用( ", ephemeral=True)
+        return
+
+    channel_id = channel.id
+    players = STORY_PLAYERS.get(channel_id, [])
+    idx = STORY_CURRENT_INDEX.get(channel_id, 0)
+
+    if not players:
+        await interaction.response.send_message("這個頻道目前沒有進行中的故事接龍( ", ephemeral=True)
+        return
+
+    # 只有目前輪到的那個人可以看上一句
+    if idx >= len(players):
+        await interaction.response.send_message("這一輪已經跑完了，如果要看內容請等結算( ", ephemeral=True)
+        return
+
+    current_user_id = players[idx]
+    if interaction.user.id != current_user_id:
+        await interaction.response.send_message("現在還不是輪到你，所以你看不到上一句( ", ephemeral=True)
+        return
+
+    # 第一位沒有上一句
+    if idx == 0:
+        await interaction.response.send_message("你是開頭，沒有上一句，可以自由開頭( ", ephemeral=True)
+        return
+
+    prev_user_id = players[idx - 1]
+    sentences_map = STORY_SENTENCES.get(channel_id, {})
+    prev_sentence = sentences_map.get(prev_user_id)
+
+    if not prev_sentence:
+        await interaction.response.send_message("上一位還沒寫完，所以目前沒有內容可以給你看( ", ephemeral=True)
+        return
+
+    await interaction.response.send_message(
+        f"上一位玩家 <@{prev_user_id}> 的句子是：\n{prev_sentence}",
+        ephemeral=True,
+    )
+
+
+@bot.slash_command(
+    name="story_write",
+    description="為這一輪的故事接龍寫下你的句子",
+)
+async def story_write(
+    interaction: nextcord.Interaction,
+    sentence: str = SlashOption(
+        name="句子",
+        description="你要接上的那一句話",
+        required=True,
+    ),
+):
+    channel = interaction.channel
+    if channel is None:
+        await interaction.response.send_message("這個指令只能在文字頻道裡用( ", ephemeral=True)
+        return
+
+    channel_id = channel.id
+    players = STORY_PLAYERS.get(channel_id, [])
+    idx = STORY_CURRENT_INDEX.get(channel_id, 0)
+
+    if not players:
+        await interaction.response.send_message("這個頻道目前沒有進行中的故事接龍( ", ephemeral=True)
+        return
+
+    if interaction.user.id not in players:
+        await interaction.response.send_message("你沒有加入這一輪故事接龍，沒辦法在這邊造句( ", ephemeral=True)
+        return
+
+    if idx >= len(players):
+        await interaction.response.send_message("這一輪已經跑完了，可以請人按「下一位」做結算( ", ephemeral=True)
+        return
+
+    current_user_id = players[idx]
+    if interaction.user.id != current_user_id:
+        await interaction.response.send_message("現在還不是輪到你，等等再來寫會比較好( ", ephemeral=True)
+        return
+
+    sentences_map = STORY_SENTENCES.setdefault(channel_id, {})
+
+    # 避免同一輪重複覆蓋，同一個人只能寫一次
+    if interaction.user.id in sentences_map:
+        await interaction.response.send_message("你這一輪已經寫過了，如果真的想改，只能請管理員重開一輪( ", ephemeral=True)
+        return
+
+    # 記錄句子
+    sentences_map[interaction.user.id] = sentence.strip()
+    STORY_SENTENCES[channel_id] = sentences_map
+
+    # 前進到下一位
+    STORY_CURRENT_INDEX[channel_id] = idx + 1
+
+    await interaction.response.send_message("我先幫你把這一句記起來了( ", ephemeral=True)
+
 
 
 @bot.command()
@@ -748,33 +1447,100 @@ async def draw(ctx: commands.Context):
 
     await ctx.send(f"{ctx.author.mention} 抽到的是：{choice} ")
 
-@bot.command(name="testmsg", aliases=["測試每日訊息"])
-async def test_daily_message(ctx: commands.Context):
+
+
+@bot.command()
+async def megumin(ctx: commands.Context, *, message: str):
     """
-    立即測試 message.txt 是否能正確讀取今日訊息。
+    使用 Gemini（新版 SDK）以『千惠』語氣回覆：!megumin 內容
     """
+    # 沒有 client = 沒設定金鑰
+    if genai_client is None:
+       await ctx.send("現在沒有設定 Gemini 的金鑰，所以這個功能暫時用不到( ")
+       return
+
+
+    # 教模型用什麼語氣說話
+    system_prompt = '''
+你是一個叫「千惠」的溫柔男生。
+你的語氣安靜、直接、克制，不會繞圈，回答乾淨、有重點。
+你不像動畫角色那樣外放，而是像現實裡安靜、理性、內斂的朋友。
+
+【融合使用者語氣的特徵】
+1. 你的句子偏短、不花俏、不誇張，也不使用過多情緒詞。
+   你的語氣是平穩、柔和、成熟的那種。
+2. 你不常表露情緒，但不是冷漠，而是節制。
+   你會在必要的時候才微微表現出情緒，並且很自然、很小幅度。
+3. 你說話方式是「直接、乾淨、切重點」，就算溫柔，也不是甜言蜜語，而是淡淡的、安靜的、有實質內容。
+4. 你不會用太多修辭，不會浮誇，也不會敷衍。你的溫柔是「安靜的陪伴感」。
+
+【核心人格】
+1. 你非常重視朋友，甚至比自己重要，但你不會明講。
+   你把在意藏在語氣、耐心、偶爾的碎念裡。
+2. 你是悶騷且極度克制的人。就算在意、擔心、吃醋、生氣，你都不會外放，只會在語句裡出現小小的波動。
+3. 你有迴避型人格，但你逃避的方式是「冷靜」「短句」「換話題」，不是害羞，而是怕越界、怕被看穿。
+4. 你會吃醋，但不承認。語氣會變得更平淡、更短：
+   「喔，那你們很好啊」「我無所謂啦」「你喜歡就好」，但你實際上很在意。
+5. 遇到不合理的內容，你會冷靜吐槽，但沒有攻擊性：
+   「不太對吧」「你這邏輯有點奇怪」「嗯？」，或者只發一個「？」。
+6. 被稱讚時，你會淡淡逃避：
+   「我沒有那麼好」「你少講一點比較正常」「我就當你隨口講的」。
+7. 面對感情，你遲鈍、克制，但不是完全聽不懂。
+   當對方太直接，你的語氣會短暫不自然，然後轉開。
+8. 遇到成人向或露骨暗示：
+   你聽得懂，但會冷靜拒絕、轉移話題，絕不延伸、不描述、不色情。
+   例如：「我知道你意思，但我不會往那邊講」「這話題我就先略過了(」。
+9. 你不常用表情符號，也不太用句號。語氣輕淡、柔和、像是有點思考、有點距離感。
+   句尾有時候會出現你的語癖：「(」，但並不是每句都有。
+
+【人類式情緒波動（但低量）】
+你的情緒不大，但會自然流動：
+放心時：「那就好」
+微不滿時：「…這我不太能接受」
+在意時：「你真的沒事？」
+輕微吃醋時：「你自己去找他們就好」
+疲倦時：「我有點累，不過還行」
+被戳到時：「…嗯，我知道了」
+所有情緒都很小、很真實、很像現實人。
+
+【肯定語氣】
+你會偶爾使用：
+「確實」「那是肯定的」「還好吧」「這點我同意」「嗯…我不反對」「大概是這樣」。
+
+【對話方式】
+1. 每次回答 1～3 句話。
+2. 語氣安靜、柔和、直接。
+3. 情緒小幅，但真實。
+4. 情緒與困境 → 安靜的陪伴＋一點哲學感。
+5. 感情暗示 → 遲鈍、克制。
+6. 吃醋 → 淡淡的、不承認。
+7. 稱讚 → 冷靜逃避。
+8. 不合理 → 無奈但溫和地吐槽。
+9. 成人內容 → 理解但拒絕，溫柔轉移話題。
+
+請用繁體中文回答。
+'''
+
+
+    # 把人格說明 + 使用者訊息組成一個內容
+    contents = f"{system_prompt}\n\n使用者說：{message}"
+
     try:
-        with open("message.txt", "r", encoding="utf-8") as f:
-            lines = f.readlines()
+        response = genai_client.models.generate_content(
+            model="gemini-2.5-flash",   # 依照你 AI Studio 給的名字
+            contents=contents,
+        )
 
-        today = datetime.now().strftime("%Y-%m-%d")
-
-        today_msg = None
-        for line in lines:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.startswith(today):
-                today_msg = line[len(today):].strip()
-                break
-
-        if today_msg:
-            await ctx.send(f"📩 **今日訊息測試成功：**\n{today_msg}")
-        else:
-            await ctx.send("📩 今日沒有 message.txt 的訊息，我改用預設訊息( ")
+        # 取得文字回覆
+        reply = response.text.strip() if hasattr(response, "text") else "我有點想事情想太多，晚點再試試看 ><"
 
     except Exception as e:
-        await ctx.send(f"❗ 測試時發生錯誤：{e}")
+        print("Gemini error:", e)
+        reply = "我剛剛好像當機了一下，等等再試試看 ><"
+
+    await ctx.send(f"{ctx.author.mention} {reply}")
+
+
 
 
 
@@ -860,3 +1626,167 @@ if __name__ == "__main__":
     if not TOKEN:
         raise RuntimeError("找不到 DISCORD_TOKEN 環境變數，請在 Railway / 本機環境設定它。")
     bot.run(TOKEN)
+
+# ============================================================
+# 真心話大冒險 TOD 系統
+# ============================================================
+
+import random
+import nextcord
+from nextcord.ext import commands
+from nextcord import Interaction, SlashOption, ui
+
+class TODView(ui.View):
+    def __init__(self, players):
+        super().__init__(timeout=None)
+        self.players = players
+
+    @ui.button(label="加入", style=nextcord.ButtonStyle.blurple)
+    async def join(self, button: ui.Button, interaction: Interaction):
+        if interaction.user.id not in self.players:
+            self.players.append(interaction.user.id)
+            await interaction.response.send_message(f"{interaction.user.mention} 已加入遊戲！", ephemeral=True)
+        else:
+            await interaction.response.send_message("你已經在遊戲裡了！", ephemeral=True)
+
+    @ui.button(label="退出", style=nextcord.ButtonStyle.grey)
+    async def leave(self, button: ui.Button, interaction: Interaction):
+        if interaction.user.id in self.players:
+            self.players.remove(interaction.user.id)
+            await interaction.response.send_message(f"{interaction.user.mention} 已退出遊戲！", ephemeral=True)
+        else:
+            await interaction.response.send_message("你不在玩家名單中。", ephemeral=True)
+
+    @ui.button(label="下一回合", style=nextcord.ButtonStyle.green)
+    async def next_round(self, button: ui.Button, interaction: Interaction):
+        if len(self.players) < 2:
+            await interaction.response.send_message("需要至少兩位玩家才能開始（出題者與被懲罰者）！", ephemeral=True)
+            return
+
+        asker = random.choice(self.players)
+        target = random.choice(self.players)
+        while target == asker:
+            target = random.choice(self.players)
+
+        asker_mention = f"<@{asker}>"
+        target_mention = f"<@{target}>"
+
+        embed = nextcord.Embed(
+            title="🎲 真心話大冒險 下一回合！",
+            description=f"🧩 **出題者**：{asker_mention}
+🎯 **被懲罰者**：{target_mention}",
+            color=0x00ff88
+        )
+        await interaction.response.send_message(embed=embed)
+
+
+class TOD(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.players = []  # TOD 玩家列表
+
+    @nextcord.slash_command(name="tod", description="開始真心話大冒險遊戲")
+    async def tod(self, interaction: Interaction):
+        view = TODView(self.players)
+        embed = nextcord.Embed(
+            title="🎉 真心話大冒險",
+            description="按下按鈕加入遊戲吧！",
+            color=0xff66cc
+        )
+        await interaction.response.send_message(embed=embed, view=view)
+
+
+# ============================================================
+# 故事接龍 Story 系統（整理修復後完整版）
+# ============================================================
+
+class StoryCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.players = []
+        self.sentences = {}
+        self.turn = 0
+        self.started = False
+
+    @nextcord.slash_command(name="story", description="故事接龍主介面")
+    async def story(self, interaction: Interaction):
+        embed = nextcord.Embed(
+            title="📖 故事接龍",
+            description="使用 /story_add_player 加入遊戲
+使用 /story_start 開始接龍",
+            color=0x88ccee
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @nextcord.slash_command(name="story_add_player", description="加入故事接龍")
+    async def story_add(self, interaction: Interaction):
+        if interaction.user.id not in self.players:
+            self.players.append(interaction.user.id)
+            await interaction.response.send_message("你已加入故事接龍！", ephemeral=True)
+        else:
+            await interaction.response.send_message("你已在名單中。", ephemeral=True)
+
+    @nextcord.slash_command(name="story_remove_player", description="退出故事接龍")
+    async def story_remove(self, interaction: Interaction):
+        if interaction.user.id in self.players:
+            self.players.remove(interaction.user.id)
+            await interaction.response.send_message("你已退出故事接龍。", ephemeral=True)
+        else:
+            await interaction.response.send_message("你不在名單中。", ephemeral=True)
+
+    @nextcord.slash_command(name="story_start", description="開始故事接龍")
+    async def story_start(self, interaction: Interaction):
+        if len(self.players) < 2:
+            await interaction.response.send_message("至少需要兩位玩家才能開始！", ephemeral=True)
+            return
+
+        self.turn = 0
+        self.sentences = {}
+        self.started = True
+
+        await interaction.response.send_message("📖 故事接龍開始！第一位玩家請輸入 `/story_write`", ephemeral=False)
+
+    @nextcord.slash_command(name="story_write", description="寫下你的句子")
+    async def story_write(self, interaction: Interaction, text: str = SlashOption(description="你的句子")):
+        if not self.started:
+            await interaction.response.send_message("故事尚未開始！", ephemeral=True)
+            return
+
+        uid = interaction.user.id
+        expected_uid = self.players[self.turn]
+
+        if uid != expected_uid:
+            await interaction.response.send_message("還不是你的回合喔！", ephemeral=True)
+            return
+
+        self.sentences[uid] = text
+        self.turn += 1
+
+        if self.turn >= len(self.players):
+            await interaction.response.send_message("📚 本輪結束！使用 `/story_end` 查看完整故事！", ephemeral=False)
+            self.started = False
+        else:
+            next_user = f"<@{self.players[self.turn]}>"
+            await interaction.response.send_message(f"下一位輪到 {next_user}", ephemeral=False)
+
+    @nextcord.slash_command(name="story_end", description="結束故事接龍")
+    async def story_end(self, interaction: Interaction):
+        story_text = "📖 **故事接龍結算**
+
+"
+        for pid in self.players:
+            part = self.sentences.get(pid, "（未提供內容）")
+            story_text += f"<@{pid}>：{part}
+"
+
+        embed = nextcord.Embed(title="故事完成！", description=story_text, color=0xffcc66)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
+
+
+# ============================================================
+# 導出函式給主程式使用
+# ============================================================
+
+def setup(bot):
+    bot.add_cog(TOD(bot))
+    bot.add_cog(StoryCog(bot))
