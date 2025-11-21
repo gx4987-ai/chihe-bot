@@ -1,5 +1,5 @@
 nextcord
 python-dotenv
 google-generativeai
-google-ai
+
 
