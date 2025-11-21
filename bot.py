@@ -1,4 +1,4 @@
-from google import genai
+
 
 import os
 import re
@@ -37,21 +37,10 @@ try:
 except ImportError:
     pass
 
-print("DEBUG GEMINI_API_KEY =", repr(os.getenv("GEMINI_API_KEY")))  # ★ 新增一行
+
 
 # Discord Token
 TOKEN = os.getenv("DISCORD_TOKEN")
-
-# Gemini API 金鑰
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-print("DEBUG GEMINI_API_KEY =", repr(GEMINI_API_KEY))  # 你之前的 debug 可以保留
-
-# 使用新版 google-genai Client
-if GEMINI_API_KEY:
-    genai_client = genai.Client(api_key=GEMINI_API_KEY)
-else:
-    genai_client = None
 
 
 # ============================================
@@ -1827,6 +1816,11 @@ async def help(ctx):
     🎲 真心話大冒險（Slash 指令）
     /tod — 開始真心話大冒險遊戲
 
+    📝 生活化數據
+    !report — 顯示今天的聊天統計數據
+    !daily_report — 查看每日訊息統計
+
     """
 
     await ctx.send(help_text)
+
