@@ -1671,12 +1671,18 @@ class TODView(ui.View):
         asker_mention = f"<@{asker}>"
         target_mention = f"<@{target}>"
 
+        
+
+
         embed = nextcord.Embed(
-            title="🎲 真心話大冒險 下一回合！",
-            description=f"🧩 **出題者**：{asker_mention}
-🎯 **被懲罰者**：{target_mention}",
-            color=0x00ff88
-        )
+    title="🎲 真心話大冒險 下一回合！",
+    description=(
+        f"🧩 **出題者**：{asker_mention}\n"
+        f"🎯 **被懲罰者**：{target_mention}"
+    ),
+    color=0x00ff88,
+)
+
         await interaction.response.send_message(embed=embed)
 
 
@@ -1711,11 +1717,14 @@ class StoryCog(commands.Cog):
     @nextcord.slash_command(name="story", description="故事接龍主介面")
     async def story(self, interaction: Interaction):
         embed = nextcord.Embed(
-            title="📖 故事接龍",
-            description="使用 /story_add_player 加入遊戲
-使用 /story_start 開始接龍",
-            color=0x88ccee
-        )
+    title="📖 故事接龍",
+    description=(
+        "使用 /story_add_player 加入遊戲\n"
+        "使用 /story_start 開始接龍"
+    ),
+    color=0x88ccee
+)
+
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @nextcord.slash_command(name="story_add_player", description="加入故事接龍")
@@ -1771,15 +1780,18 @@ class StoryCog(commands.Cog):
 
     @nextcord.slash_command(name="story_end", description="結束故事接龍")
     async def story_end(self, interaction: Interaction):
-        story_text = "📖 **故事接龍結算**
+        story_text = "📖 **故事接龍結算**\n\n"
 
-"
         for pid in self.players:
             part = self.sentences.get(pid, "（未提供內容）")
-            story_text += f"<@{pid}>：{part}
-"
+            story_text += f"📘 <@{pid}>：{part}\n"  # 正確的 f-string 格式
 
-        embed = nextcord.Embed(title="故事完成！", description=story_text, color=0xffcc66)
+        embed = nextcord.Embed(
+            title="故事完成！",
+            description=story_text,
+            color=0xffcc66
+        )
+
         await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
@@ -1790,3 +1802,31 @@ class StoryCog(commands.Cog):
 def setup(bot):
     bot.add_cog(TOD(bot))
     bot.add_cog(StoryCog(bot))
+
+# 添加 !help 指令顯示所有指令
+@bot.command()
+async def help(ctx):
+    help_text = """
+    📘 **千惠 Bot 指令一覽**
+
+    🎴 一般指令
+    !ping — 檢查 bot 是否在線
+    !megumin <訊息> — 讓千惠用惠惠語氣回覆你
+    !draw — 今日運勢抽籤
+    !遠征排行 — 查看遠征傷害排行榜
+
+    🌸 故事接龍（Slash 指令）
+    /story — 開啟故事接龍控制面板
+    /story_add_player — 加入故事接龍
+    /story_remove_player — 退出故事接龍
+    /story_start — 開始接龍
+    /story_write — 撰寫你的句子
+    /story_prev — 查看上一句（僅輪到你）
+    /story_end — 結算故事並查看完整內容
+
+    🎲 真心話大冒險（Slash 指令）
+    /tod — 開始真心話大冒險遊戲
+
+    """
+
+    await ctx.send(help_text)
