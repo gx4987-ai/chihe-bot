@@ -405,7 +405,7 @@ async def handle_greeting_if_any(message: nextcord.Message) -> bool:
     content = message.content
     now_ts = datetime.now().timestamp()
 
-    for kw, base_reply in TIME_KEYWORD_REPLIES.items():
+    for kw, base_reply in EMOTION_KEYWORD_REPLIES.items():
         if is_keyword_triggered(kw, content):
             last_ts = GREETING_LAST_TIME.get(kw, 0.0)
             if now_ts - last_ts >= GREETING_COOLDOWN:
