@@ -17,7 +17,7 @@ from nextcord.ui import View, button
 from nextcord import SlashOption
 
 # 訊息檔案路徑
-Mimport json
+import json
 import os
 
 def load_messages():
