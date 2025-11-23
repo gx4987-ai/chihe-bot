@@ -15,8 +15,16 @@ from nextcord.ext import commands, tasks
 from nextcord.ui import View, button
 from nextcord import SlashOption
 
+import os
+print(f"Current working directory: {os.getcwd()}")
+
+import os
+print("Checking if messages.json exists:", os.path.exists(MESSAGE_FILE))
+
+
+
 # 訊息檔案路徑
-MESSAGE_FILE = os.path.join(os.path.dirname(__file__), "messages", "messages.json")
+MESSAGE_FILE = "/app/messages/messages.json"
 
 from message_loader import load_messages
 
