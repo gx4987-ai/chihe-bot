@@ -23,6 +23,14 @@ import os
 print(f"Current working directory: {os.getcwd()}")
 print(f"Checking if messages.json exists: {os.path.exists(MESSAGE_FILE)}")
 print(f"Absolute path to messages.json: {os.path.abspath(MESSAGE_FILE)}")
+import os
+
+# Print the current working directory to make sure the path is correct
+print(f"Current working directory: {os.getcwd()}")
+
+# Print the content of the current directory to check if messages.json exists
+print(f"Listing files in current directory: {os.listdir('.')}")
+
 
 
 from message_loader import load_messages
