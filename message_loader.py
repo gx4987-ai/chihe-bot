@@ -9,7 +9,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MESSAGE_FILE = "./messages.json"
 
 def load_messages():
-    with open(MESSAGE_FILE, "r", encoding="utf-8") as f:
+    with open("messages.json", "r", encoding="utf-8") as f:
+    # 處理訊息
+
         return json.load(f)
 
 
