@@ -17,17 +17,25 @@ from nextcord.ui import View, button
 from nextcord import SlashOption
 
 # 訊息檔案路徑
-MESSAGE_FILE = "messages.json"
-
-import json
+Mimport json
+import os
 
 def load_messages():
     try:
-        with open(MESSAGE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)  # 這樣會把 JSON 檔案載入成一個 Python 物件
-    except Exception as e:
-        print(f"Error loading messages: {e}")
+        print(f"Attempting to load {MESSAGE_FILE}")
+        with open(MESSAGE_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data
+    except FileNotFoundError:
+        print(f"Error: The file {MESSAGE_FILE} was not found.")
         return []
+    except json.JSONDecodeError:
+        print("Error: JSON decode error.")
+        return []
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return []
+
 
 import os
 print(f"Current working directory: {os.getcwd()}")
