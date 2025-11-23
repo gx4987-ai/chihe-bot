@@ -19,12 +19,14 @@ import os
 print(f"Current working directory: {os.getcwd()}")
 
 import os
-print("Checking if messages.json exists:", os.path.exists(MESSAGE_FILE))
+print(f"Checking if messages.json exists: {os.path.exists(MESSAGE_FILE)}")
+
 
 
 
 # 訊息檔案路徑
-MESSAGE_FILE = "/app/messages/messages.json"
+MESSAGE_FILE = "messages/messages.json"
+
 
 from message_loader import load_messages
 
