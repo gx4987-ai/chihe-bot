@@ -6,7 +6,12 @@ import json
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 你的檔案路徑：love_reminder_bot/message/messages.json
-MESSAGE_FILE = os.path.join(BASE_DIR, "messages", "messages.json")
+MESSAGE_FILE = "./messages.json"
+
+def load_messages():
+    with open(MESSAGE_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
 
 
 def load_messages():
