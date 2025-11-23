@@ -16,7 +16,7 @@ from nextcord.ui import View, button
 from nextcord import SlashOption
 
 # 訊息檔案路徑
-MESSAGE_FILE = "/messages/messages.json"
+MESSAGE_FILE = os.path.join(os.path.dirname(__file__), "messages", "messages.json")
 
 from message_loader import load_messages
 
