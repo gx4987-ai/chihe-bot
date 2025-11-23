@@ -34,6 +34,9 @@ print(f"Current working directory: {os.getcwd()}")
 print(f"Checking if messages.json exists: {os.path.exists(MESSAGE_FILE)}")
 print(f"Absolute path to messages.json: {os.path.abspath(MESSAGE_FILE)}")
 import os
+import os
+print("Current working directory:", os.getcwd())
+print("Checking if messages.json exists:", os.path.exists('./messages/messages.json'))
 
 # Print the current working directory to make sure the path is correct
 print(f"Current working directory: {os.getcwd()}")
