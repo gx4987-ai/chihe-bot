@@ -25,7 +25,8 @@ print(f"Checking if messages.json exists: {os.path.exists(MESSAGE_FILE)}")
 
 
 # 訊息檔案路徑
-MESSAGE_FILE = "messages/messages.json"
+MESSAGE_FILE = "./messages/messages.json"
+
 
 
 from message_loader import load_messages
