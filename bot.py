@@ -16,11 +16,14 @@ from nextcord.ui import View, button
 from nextcord import SlashOption
 
 # 訊息檔案路徑
-MESSAGE_FILE = "./messages/messages.json"
+MESSAGE_FILE = "/app/messages/messages.json"
+
 
 import os
 print(f"Current working directory: {os.getcwd()}")
 print(f"Checking if messages.json exists: {os.path.exists(MESSAGE_FILE)}")
+print(f"Absolute path to messages.json: {os.path.abspath(MESSAGE_FILE)}")
+
 
 from message_loader import load_messages
 messages = load_messages()
