@@ -48,7 +48,7 @@ print(f"Absolute path to messages.json: {os.path.abspath(MESSAGE_FILE)}")
 import os
 import os
 print("Current working directory:", os.getcwd())
-print("Checking if messages.json exists:", os.path.exists('./messages/messages.json'))
+print("Checking if messages.json exists:", os.path.exists('./messages.json'))
 
 # Print the current working directory to make sure the path is correct
 print(f"Current working directory: {os.getcwd()}")
@@ -70,11 +70,7 @@ except Exception as e:
 
 
 from message_loader import load_messages
-messages = load_messages()
 
-
-
-from message_loader import load_messages
 
 # 先載入訊息
 messages = load_messages()
