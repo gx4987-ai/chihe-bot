@@ -15,6 +15,14 @@ from nextcord.ext import commands, tasks
 from nextcord.ui import View, button
 from nextcord import SlashOption
 
+# 訊息檔案路徑
+MESSAGE_FILE = "./message/messages.json"
+
+from message_loader import load_messages
+
+# 先載入訊息
+messages = load_messages()
+
 
 # ---- Intents / Bot ----
 intents = nextcord.Intents.default()
