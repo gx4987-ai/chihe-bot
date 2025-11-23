@@ -6,6 +6,15 @@ import random
 
 import json
 
+def load_messages():
+    try:
+        with open(MESSAGE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)  # 這樣會把 JSON 檔案載入成一個 Python 物件
+    except Exception as e:
+        print(f"Error loading messages: {e}")
+        return []
+
+
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Tuple, Optional
 
