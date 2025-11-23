@@ -20,6 +20,10 @@ from nextcord import SlashOption
 import json
 import os
 
+
+MESSAGE_FILE = "messages.json"
+
+
 def load_messages():
     try:
         print(f"Attempting to load {MESSAGE_FILE}")
