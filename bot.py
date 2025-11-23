@@ -31,6 +31,15 @@ print(f"Current working directory: {os.getcwd()}")
 # Print the content of the current directory to check if messages.json exists
 print(f"Listing files in current directory: {os.listdir('.')}")
 
+try:
+    with open(MESSAGE_FILE, "r", encoding="utf-8") as f:
+        messages = json.load(f)
+except json.JSONDecodeError as e:
+    print(f"Error decoding JSON: {e}")
+except Exception as e:
+    print(f"Unexpected error: {e}")
+
+
 
 
 from message_loader import load_messages
