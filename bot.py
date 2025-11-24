@@ -25,10 +25,12 @@ from nextcord import SlashOption
 import json
 import os
 import nextcord
-from nextcord.ext import commands
+from nextcord.ext import commands, tasks
 
-intents = .Intents.default()
-intents.message_content = True
+# ---- Intents ----
+intents = nextcord.Intents.default()
+intents.message_content = True  # 記得 Dev Portal 要開
+
 
 bot = commands.Bot(
     command_prefix="!",
