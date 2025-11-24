@@ -363,43 +363,12 @@ async def stats_rank(inter: Interaction):
     await inter.response.send_message(embed=embed)
 
 # ===== /賭博（開局） =====
-@bot.slash_command(
+@@bot.slash_command(
     name="賭博", 
     description="建立或查看目前的賭局狀態"
-    )
-# 安全讀取 JSON
-def safe_load_gamble():
-    """載入 gamble_data.json，若缺少欄位自動補齊避免 KeyError"""
-
-    data = load_gamble()  # ← 正確：載入 JSON
-
-    # ===== 保證必要欄位存在 =====
-    if "players" not in data or not isinstance(data["players"], dict):
-        data["players"] = {}
-
-    if "order" not in data or not isinstance(data["order"], list):
-        data["order"] = []
-
-    if "bets" not in data or not isinstance(data["bets"], dict):
-        data["bets"] = {}
-
-    if "status" not in data:
-        data["status"] = "closed"
-
-    if "creator" not in data:
-        data["creator"] = None
-
-    if "banker_index" not in data:
-        data["banker_index"] = 0
-
-    if "ready" not in data:
-        data["ready"] = False
-
-    # 存回檔案以確保資料格式一致
-    save_gamble(data)
-
-    return data
-
+)
+async def gamble(inter: Interaction):
+    data = safe_load_gamble()
 
     # 目前莊家
     banker_name = "（無）"
@@ -430,6 +399,36 @@ def safe_load_gamble():
     embed.set_footer(text="使用 /加入賭局 加入遊戲，閒家完成下注後莊家才能擲骰。")
 
     await inter.response.send_message(embed=embed)
+
+    def safe_load_gamble():
+    """載入 gamble_data.json，若缺少欄位自動補齊避免 KeyError"""
+
+    data = load_gamble()
+
+    if "players" not in data or not isinstance(data["players"], dict):
+        data["players"] = {}
+
+    if "order" not in data or not isinstance(data["order"], list):
+        data["order"] = []
+
+    if "bets" not in data or not isinstance(data["bets"], dict):
+        data["bets"] = {}
+
+    if "status" not in data:
+        data["status"] = "closed"
+
+    if "creator" not in data:
+        data["creator"] = None
+
+    if "banker_index" not in data:
+        data["banker_index"] = 0
+
+    if "ready" not in data:
+        data["ready"] = False
+
+    save_gamble(data)
+    return data
+
 
 
 # ===== UI (Rewrite C2 Style) =====
