@@ -250,26 +250,6 @@ async def gamble_main(inter: Interaction):
 
 # ===== /開始賭博 =====
 # ===== /賭博（主介面） =====
-@bot.slash_command(name="賭博", description="開啟賭場主介面")
-async def gamble_main(inter: Interaction):
-
-    data = load_gamble()
-
-    embed = nextcord.Embed(
-        title="🎲 賭場系統",
-        description=(
-            "歡迎來到 **千惠的賭博骰子**！\n\n"
-            "使用下方按鈕操作：\n"
-            "・加入賭局\n"
-            "・下注\n"
-            "・開始擲骰（莊家專用）\n"
-            "・查看規則與操作方式\n"
-        ),
-        color=0x2f3136
-    )
-
-    await inter.response.send_message(embed=embed, view=GambleMainView(), ephemeral=False)
-
 
 # ===== 賭博主介面按鈕 =====
 class GambleMainView(nextcord.ui.View):
@@ -3014,8 +2994,9 @@ async def myhelp(ctx):
     /story_prev — 查看上一句（僅輪到你）
     /story_end — 結算故事並查看完整內容
 
-    🎲 真心話大冒險（Slash 指令）
+    🎲 遊戲（Slash 指令）
     /tod — 開始真心話大冒險遊戲
+    /賭博 — 千惠的賭博骰子
 
     📝 生活化數據
     !report — 顯示今天的聊天統計數據
