@@ -904,13 +904,11 @@ async def resolve_user_info(bot, guild, user_id: int):
 
 @bot.command()
 async def top(ctx: commands.Context):
-    """千惠的留言排行榜 Top 25（圖像 Top10 + 你的名次提示）"""
 
     if not os.path.exists("user_message_counts.json"):
         await ctx.send("紀錄檔案不存在… 我沒法算排行榜( ")
         return
 
-    # 讀取統計檔案
     with open("user_message_counts.json", "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -918,26 +916,23 @@ async def top(ctx: commands.Context):
         await ctx.send("目前還沒有任何留言紀錄( ")
         return
 
-    # 排序（全部）
     ranking = sorted(data.items(), key=lambda x: x[1], reverse=True)
 
     # Top 10 & Top 25
     top10 = ranking[:10]
     top25 = ranking[:25]
 
-    # 找出自己名次
-    user_ids_ordered = [int(uid) for uid, _ in ranking]
+    user_idsordered = [int(uid) for uid,  in ranking]
     author_id = ctx.author.id
 
     if author_id in user_ids_ordered:
         self_rank = user_ids_ordered.index(author_id) + 1
         self_count = data.get(str(author_id), 0)
-        self_text = f"你目前是第 **{self_rank} 名**，累積 **{self_count} 則留言**。"
+        self_text = f"你目前是第 {self_rank} 名，累積 {self_count} 則留言。"
     else:
         self_rank = None
         self_text = "你目前還沒上榜，不然多跟大家聊聊天看看( "
 
-    # 決定 Embed 顏色（依據「你的排名」）
     if self_rank == 1:
         color = 0xFFD700  # 金
     elif self_rank == 2:
@@ -947,8 +942,7 @@ async def top(ctx: commands.Context):
     else:
         color = 0xFFCC66  # 普通暖色
 
-    embed = nextcord.Embed(
-        title="☀️ 〈伺服器留言排行榜 Top 25〉",
+    embed = nextcord.Embed(title="按一下以了解更多 〈伺服器留言排行榜 Top 25〉",
         description=(
             "「我每天都在看著你們講話啦……所以我做了這個。欸… "
             "我偷偷整理的啦，你們不要笑我。」\n\n"
@@ -957,39 +951,40 @@ async def top(ctx: commands.Context):
         color=color,
     )
 
-    # 前 10 名文字列
+
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     lines = []
+
     for idx, (user_id, count) in enumerate(top10, start=1):
         member = ctx.guild.get_member(int(user_id))
+
         if member:
-           name_display = member.display_name
-    else:
-      try:
-        user = await bot.fetch_user(int(user_id))
-        name_display = user.global_name or user.name
-      except Exception:
-        name_display = "未知使用者"
+            name_display = member.display_name
+        else:
+            try:
+                user = await bot.fetch_user(int(user_id))
+                name_display = user.global_name or user.name
+            except Exception:
+                name_display = "未知使用者"
 
         medal = medals.get(idx, f"#{idx}")
-        lines.append(f"{medal} {name_display} — **{count} 則**")
+        lines.append(f"{medal} {name_display} — {count} 則")
 
     embed.add_field(name="Top 10", value="\n".join(lines), inline=False)
 
-    # 如果自己不在 Top 10，但在 Top 25，額外提醒一次
+
     if self_rank and self_rank > 10 and self_rank <= 25:
         embed.add_field(
             name="你的位置",
-            value=f"你在前 25 名裡，目前是第 **{self_rank} 名**。",
+            value=f"你在前 25 名裡，目前是第 {self_rank} 名。",
             inline=False,
         )
 
     embed.set_footer(text="「你們每天講話的樣子… 我都在旁邊看著。真的。謝謝你們一直讓伺服器這麼熱鬧。」")
 
-    # === 產生 Top10 合照圖 ===
     img = await build_top10_image(bot, ctx.guild, top10)
 
-    # 存到記憶體並附加到 Embed
+
     with io.BytesIO() as image_binary:
         img.save(image_binary, format="PNG")
         image_binary.seek(0)
@@ -997,6 +992,7 @@ async def top(ctx: commands.Context):
         embed.set_image(url="attachment://top10.png")
 
         await ctx.send(file=file, embed=embed)
+    
 
 
 @tasks.loop(minutes=1)
