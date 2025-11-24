@@ -963,13 +963,13 @@ async def top(ctx: commands.Context):
     for idx, (user_id, count) in enumerate(top10, start=1):
         member = ctx.guild.get_member(int(user_id))
         if member:
-            name_display = member.display_name
-        else:
-            try:
-                user = await bot.fetch_user(int(user_id))
-                name_display = user.name
-            except Exception:
-                name_display = "未知使用者"
+           name_display = member.display_name
+    else:
+      try:
+        user = await bot.fetch_user(int(user_id))
+        name_display = user.global_name or user.name
+      except Exception:
+        name_display = "未知使用者"
 
         medal = medals.get(idx, f"#{idx}")
         lines.append(f"{medal} {name_display} — **{count} 則**")
