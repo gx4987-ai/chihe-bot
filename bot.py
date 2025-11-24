@@ -96,6 +96,11 @@ async def on_ready():
     if not daily_job_task.is_running():
         daily_job_task.start()
 
+from datetime import datetime, timedelta, timezone
+
+# ===== 台北時區 =====
+TAIPEI_TZ = timezone(timedelta(hours=8))
+
 
     # 同步 slash 指令
     try:
