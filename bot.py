@@ -11,6 +11,7 @@ import io                       # 給 build_top10_image 用
 import nextcord
 from nextcord.ext import commands, tasks
 from nextcord import Interaction, SlashOption
+from nextcord.ui import View, button
 
 
 
@@ -88,6 +89,13 @@ except json.JSONDecodeError as e:
 except Exception as e:
     print(f"Unexpected error: {e}")
 
+from nextcord.ui import View, Button
+import nextcord
+
+class TodView(View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(Button(label="Test", style=nextcord.ButtonStyle.green))
 
 
 
@@ -1867,6 +1875,8 @@ async def expedition_rank(ctx: commands.Context):
     await ctx.send(embed=embed)
 
 
+from nextcord.ui import View, button
+
 class TodView(View):
     """真心話大冒險控制台用的按鈕 View"""
 
@@ -1892,9 +1902,10 @@ class TodView(View):
 
         if interaction.user.id in players:
             players.remove(interaction.user.id)
-            await interaction.response.send_message("好，我先把你從這輪名單裡拿掉( ", ephemeral=True)
+            await interaction.response.send_message("你已經退出這輪遊戲( ", ephemeral=True)
         else:
-            await interaction.response.send_message("你本來就不在這輪名單裡( ", ephemeral=True)
+            await interaction.response.send_message("你原本就不在這輪遊戲裡( ", ephemeral=True)
+
 
     @button(label="查看玩家", style=nextcord.ButtonStyle.gray)
     async def list_button(self, _: nextcord.ui.Button, interaction: nextcord.Interaction):
