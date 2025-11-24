@@ -2555,10 +2555,10 @@ class StartDiceButton(nextcord.ui.View):
         embed = nextcord.Embed(title="🎲 莊家擲骰", color=0x2f3136)
         embed.add_field(
             name="【莊家】",
-            value=f"🎲 {' '.join(dice_emoji[x] for x in d)}
-牌型：{info['type']}",
+            value="🎲 " + " ".join(dice_emoji[x] for x in d) + f"\n牌型：{info['type']}",
             inline=False
-        )
+)
+
 
         result_text = "
 ――――――――――――――――――――――――
@@ -2573,8 +2573,7 @@ class StartDiceButton(nextcord.ui.View):
                 data["players"][pid]["points"] += pay
                 data["players"][banker_uid]["points"] -= pay
                 total_pay += pay
-                result_text += f"
-**{data['players'][pid]['name']}**：贏兩倍（+{pay}）"
+                result_text += f"**{data['players'][pid]['name']}**：贏兩倍（+{pay}）"
 
             embed.add_field(
                 name="【結果】",
@@ -2588,8 +2587,7 @@ class StartDiceButton(nextcord.ui.View):
                 pd = roll3()
                 pi = classify(pd)
 
-                result_text += f"
-**{data['players'][pid]['name']}** → {' '.join(dice_emoji[x] for x in pd)}（{pi['type']}）"
+                result_text += f"**{data['players'][pid]['name']}** → {' '.join(dice_emoji[x] for x in pd)}（{pi['type']}）"
 
                 if pi["type"] == "456":
                     result_text += " → 平手"
@@ -2608,8 +2606,7 @@ class StartDiceButton(nextcord.ui.View):
                 pd = roll3()
                 pi = classify(pd)
 
-                result_text += f"
-**{data['players'][pid]['name']}** → {' '.join(dice_emoji[x] for x in pd)}（{pi['type']}）"
+                result_text += f"**{data['players'][pid]['name']}** → {' '.join(dice_emoji[x] for x in pd)}（{pi['type']}）"
 
                 # 閒家 456
                 if pi["type"] == "456":
