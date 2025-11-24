@@ -221,7 +221,8 @@ class GambleMainView(nextcord.ui.View):
 
     @nextcord.ui.button(label="➕ 加入賭局", style=nextcord.ButtonStyle.green)
     async def join_btn(self, btn, inter):
-        await join_gamble.callback(inter)
+        await join_gamble(inter)
+
 
     @nextcord.ui.button(label="💰 下注", style=nextcord.ButtonStyle.blurple)
     async def bet_btn(self, btn, inter):
