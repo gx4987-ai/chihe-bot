@@ -655,7 +655,7 @@ def get_today_message() -> Optional[str]:
     """
     today_str = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d")
     try:
-        with open("message/messages.json", "r", encoding="utf-8") as f:
+        with open("messages.json", "r", encoding="utf-8") as f:
             data = json.load(f)
 
         for entry in data:
