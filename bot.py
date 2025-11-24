@@ -69,15 +69,21 @@ messages = load_messages()
 intents = nextcord.Intents.default()
 intents.message_content = True  # 記得在 Dev Portal 也要開啟 Message Content Intent
 
-bot = commands.Bot(
-    command_prefix="!",
-    intents=intents
-)
+@bot.event
+async def on_ready():
+    print(f"✔️ Bot 已啟動：{bot.user} (ID: {bot.user.id})")
 
-        weekly_report_task.start()
-        monthly_report_task.start()
+    # 啟動定時任務
+    weekly_report_task.start()
+    daily_job_task.start()
 
-    print("🟢 所有系統啟動完成。")
+    # 同步 slash 指令
+    try:
+        synced = await bot.sync_application_commands()
+        print(f"✔️ 已同步 {len(synced)} 個 Slash 指令")
+    except Exception as e:
+        print("❌ 同步指令時發生錯誤:", e)
+
 
 
 # 🎲 賭博系統（簡潔 Style C Embed＋規則＆操作按鈕）
