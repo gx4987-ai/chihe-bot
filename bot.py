@@ -8,6 +8,9 @@ import aiohttp
 from PIL import Image, ImageDraw
 import io                       # 給 build_top10_image 用
 
+import nextcord
+from nextcord.ext import commands, tasks
+from nextcord import Interaction, SlashOption
 
 
 
@@ -15,11 +18,6 @@ import io                       # 給 build_top10_image 用
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Tuple, Optional
 
-import nextcord
-from nextcord.ext import commands, tasks
-
-from nextcord.ui import View, button
-from nextcord import SlashOption
 
 # 訊息檔案路徑
 import json
@@ -93,22 +91,26 @@ except Exception as e:
 
 
 
-from message_loader import load_messages
+from message_loader import load_messages as load_messages_from_module
+
 
 
 # 先載入訊息
 messages = load_messages()
 
-from nextcord.ext import commands, tasks   # ✅ 用 commands + tasks，就好
 
 intents = nextcord.Intents.default()
 intents.message_content = True  # 記得在 Dev Portal 也要開
 
 # ✅ 回到 commands.Bot，這樣 sync_application_commands() 才會回傳 list
-bot = commands.Bot(
+intents = nextcord.Intents.default()
+intents.message_content = True
+
+bot = nextcord.Bot(
     command_prefix="!",
     intents=intents
 )
+
 
 @bot.event
 async def on_ready():
@@ -134,10 +136,7 @@ async def on_ready():
 # 🎲 賭博系統（簡潔 Style C Embed＋規則＆操作按鈕）
 # 以下為示範結構（請按照你 bot 原本的架構貼入）
 
-import nextcord
-from nextcord.ext import commands
-from nextcord import Interaction, SlashOption
-import json, os, random
+
 
 # ＝＝＝資料處理＝＝＝
 GAMBLE_FILE = "gamble_data.json"
