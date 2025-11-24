@@ -889,11 +889,11 @@ async def resolve_user_info(bot, guild, user_id: int):
     try:
         user = await bot.fetch_user(user_id)
         return {
-            "name": user.name,
-            "mention": user.name,  # 不在伺服器，用名字即可
+            "name": user.global_name or user.name,
+            "mention": user.mention,  # 不在伺服器，用名字即可
             "avatar": user.display_avatar.url
         }
-    except:
+   except Exception:
         return {
             "name": "未知使用者",
             "mention": "未知使用者",
