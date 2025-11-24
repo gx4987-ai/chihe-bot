@@ -24,6 +24,16 @@ from nextcord import SlashOption
 # 訊息檔案路徑
 import json
 import os
+import nextcord
+from nextcord.ext import commands
+
+intents = .Intents.default()
+intents.message_content = True
+
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents
+)
 
 
 # ---- 近 90 天留言統計（畫圖用） ----
