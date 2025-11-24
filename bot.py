@@ -2442,25 +2442,27 @@ class RulesButtonView(nextcord.ui.View):
 
         await inter.response.send_message(embed=embed, ephemeral=True)
 
-    @nextcord.ui.button(label="🕹️ 操作方式", style=nextcord.ButtonStyle.blurple)
+        @nextcord.ui.button(label="🎮 操作方式", style=nextcord.ButtonStyle.blurple)
     async def howto(self, btn, inter):
-        embed = nextcord.Embed(title="🕹️ 操作方式", color=0x2f3136)
-        embed.description = (
-        "**/加入賭局** → 加入遊戲（起始 5000 點）
-"
-        "**/下注 數字** → 閒家下注
-"
-        "下注完成後 → 系統自動跳出『開始擲骰』按鈕給莊家
-"
-        "
-"
-        "**莊家按按鈕 → 開始擲骰 & 結算**
-"
-        "
-"
-        "**/擲骰、/3d6** → 玩家自由骰（與賭局無關）"
+        embed = nextcord.Embed(
+            title="🎮 操作方式",
+            color=0x2f3136
         )
+
+        embed.description = """
+**/加入賭局** → 加入遊戲（起始 5000 點）
+
+**/下注 數字** → 開局下注  
+
+下註完成後，系統會自動跳出「開始擲骰」按鈕給莊家  
+
+莊家擲完 → 閒家依序擲骰  
+全部擲完後系統自動結算點數  
+點數歸零或負債＝淘汰退出當局  
+"""
+
         await inter.response.send_message(embed=embed, ephemeral=True)
+
 
 # ===== UI（莊家開骰） =====
 class StartDiceButton(nextcord.ui.View):
