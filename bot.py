@@ -481,7 +481,7 @@ def get_mission_for_today() -> str:
     return DAILY_MISSIONS[idx]
 
 
-@bot.command(name="任務", aliases=["今日任務", "任務"])
+@bot.command(name="今日任務", aliases=["今日任務", "任務"])
 async def mission_cmd(ctx: commands.Context):
     m = get_mission_for_today()
     await ctx.send(f"{ctx.author.mention} 今天的任務是：{m}")
