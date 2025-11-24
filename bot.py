@@ -3,6 +3,7 @@
 import os
 import re
 import random
+import time
 
 
 
@@ -555,7 +556,7 @@ async def personal_stats(ctx: commands.Context):
         night_comment = "深夜很少看到你，這樣比較好，至少你睡得比我放心( "
 
     embed = nextcord.Embed(
-        title=f"📘 你的個人留言統計 · 千惠版",
+        title=f"📘 你的個人留言統計",
         color=0xFFB7C5
     )
 
