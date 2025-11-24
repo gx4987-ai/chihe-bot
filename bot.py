@@ -2415,42 +2415,32 @@ class RulesButtonView(nextcord.ui.View):
 
     @nextcord.ui.button(label="📘 遊戲規則", style=nextcord.ButtonStyle.gray)
     async def rules(self, btn, inter):
-        embed = nextcord.Embed(title="🎲 賭博骰子規則（簡潔版）", color=0x2f3136)
-        embed.description = (
-        "**【456（最大）】**
-"
-        "・擲出者贏三倍
-"
-        "・閒家可擲出 456 才能平手
-"
-        "
-"
-        "**【123（最小）】**
-"
-        "・擲出者輸兩倍
-"
-        "・若莊家 123 → 閒家不用骰，直接收兩倍
-"
-        "
-"
-        "**【全色（111,222~666）】**
-"
-        "・點數＝骰面
-"
-        "・111→贏五倍 / 222~666→贏三倍
-"
-        "
-"
-        "**【平色】**
-"
-        "・兩顆相同→第三顆為點數
-"
-        "
-"
-        "**【無點】**
-"
-        "・三顆不同→重骰最多三次→仍不同＝0 點"
-        )
+        embed = nextcord.Embed(
+    title="🎲 賭博骰子規則（簡潔版）",
+    color=0x2f3136
+)
+
+embed.description = """
+**【456（最大）】**
+・擲出者贏三倍
+・閒家可擲出 456 才能平手
+
+**【123（最小）】**
+・擲出者輸兩倍
+・若莊家 123 → 閒家不用骰，直接收兩倍
+
+**【全色（111,222~666）】**
+・點數＝骰面
+・111→贏五倍 / 222~666→贏三倍
+
+**【平色】**
+・兩顆相同→第三顆為點數
+
+**【無點】**
+・三顆不同→重骰最多三次→仍不同＝0 點
+"""
+
+        
         await inter.response.send_message(embed=embed, ephemeral=True)
 
     @nextcord.ui.button(label="🕹️ 操作方式", style=nextcord.ButtonStyle.blurple)
