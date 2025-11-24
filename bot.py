@@ -4,7 +4,8 @@ import os
 import re
 import random
 import time
-
+import aiohttp
+from PIL import Image, ImageDraw
 
 
 
@@ -461,6 +462,74 @@ async def handle_greeting_if_any(message: nextcord.Message) -> bool:
                 # 在冷卻中 → 什麼都不說
                 return False
     return False
+AVATAR_SIZE = 64
+AVATAR_PADDING = 16   # 頭貼之間的間距
+COLUMNS = 5           # 一排 5 個頭貼
+ROWS = 2              # 共兩排，最多 10 人
+
+
+async def fetch_image_bytes(url: str) -> bytes:
+    """下載圖片成 bytes（用來抓頭貼）"""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            return await resp.read()
+
+
+def circle_crop(image: Image.Image, size: int) -> Image.Image:
+    """把頭貼裁成圓形並調整大小"""
+    image = image.resize((size, size), Image.LANCZOS).convert("RGBA")
+    mask = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((0, 0, size, size), fill=255)
+    image.putalpha(mask)
+    return image
+
+
+async def build_top10_image(bot, guild, top10):
+    """
+    建立 Top10 合照圖。
+    top10: list[(user_id, count)]
+    回傳 PIL Image 物件
+    """
+    width = COLUMNS * AVATAR_SIZE + (COLUMNS + 1) * AVATAR_PADDING
+    height = ROWS * AVATAR_SIZE + (ROWS + 1) * AVATAR_PADDING
+    bg_color = (20, 20, 24)  # 深色背景
+
+    canvas = Image.new("RGBA", (width, height), bg_color)
+
+    for idx, (user_id, _count) in enumerate(top10):
+        row = idx // COLUMNS
+        col = idx % COLUMNS
+
+        x = AVATAR_PADDING + col * (AVATAR_SIZE + AVATAR_PADDING)
+        y = AVATAR_PADDING + row * (AVATAR_SIZE + AVATAR_PADDING)
+
+        # 優先從 guild 找成員
+        member = guild.get_member(int(user_id))
+        avatar_url = None
+        if member:
+            avatar_url = member.display_avatar.url
+        else:
+            try:
+                user = await bot.fetch_user(int(user_id))
+                avatar_url = user.display_avatar.url
+            except Exception:
+                avatar_url = None
+
+        if not avatar_url:
+            # 沒有頭貼就跳過（或放一個預設圖也可以）
+            continue
+
+        try:
+            data = await fetch_image_bytes(avatar_url)
+            avatar_img = Image.open(io.BytesIO(data))
+            avatar_img = circle_crop(avatar_img, AVATAR_SIZE)
+            canvas.paste(avatar_img, (x, y), avatar_img)
+        except Exception:
+            # 單一失敗不影響整張圖
+            continue
+
+    return canvas
 
 
 # ---------- 5. 每日任務（今日小任務） ----------
@@ -807,40 +876,130 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-@bot.command()
-async def top(ctx):
-    """千惠的留言排行榜 Top 25"""
 
-    # 防呆：檢查檔案是否存在
+async def resolve_user_info(bot, guild, user_id: int):
+    # 1. 先找伺服器成員
+    member = guild.get_member(user_id)
+    if member:
+        return {
+            "name": member.display_name,
+            "mention": member.mention,
+            "avatar": member.display_avatar.url
+        }
+
+    # 2. 伺服器找不到 → 向 Discord API 查詢
+    try:
+        user = await bot.fetch_user(user_id)
+        return {
+            "name": user.name,
+            "mention": user.name,  # 不在伺服器，用名字即可
+            "avatar": user.display_avatar.url
+        }
+    except:
+        return {
+            "name": "未知使用者",
+            "mention": "未知使用者",
+            "avatar": None
+        }
+
+
+
+@bot.command()
+async def top(ctx: commands.Context):
+    """千惠的留言排行榜 Top 25（圖像 Top10 + 你的名次提示）"""
+
     if not os.path.exists("user_message_counts.json"):
-        await ctx.send("紀錄檔不存在喔… 我沒有辦法算排行榜。")
+        await ctx.send("紀錄檔案不存在… 我沒法算排行榜( ")
         return
 
-    # 讀取檔案
+    # 讀取統計檔案
     with open("user_message_counts.json", "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # 排序
-    sorted_users = sorted(data.items(), key=lambda x: x[1], reverse=True)
-    top25 = sorted_users[:25]
+    if not data:
+        await ctx.send("目前還沒有任何留言紀錄( ")
+        return
 
-    # 建立訊息
-    lines = []
-    rank = 1
-    for user_id, count in top25:
-        user = ctx.guild.get_member(int(user_id))
-        username = user.mention if user else f"未知使用者({user_id})"
-        lines.append(f"{rank}. {username} — **{count} 則**")
-        rank += 1
+    # 排序（全部）
+    ranking = sorted(data.items(), key=lambda x: x[1], reverse=True)
 
-    message = (
-        "🌟 **《伺服器留言排行榜 Top 25》**\n"
-        "> 「我每天都在看著你們講話啦……所以我做了這個。欸… 我偷偷整理的啦，你們不要笑我。」\n\n"
-        + "\n".join(lines) +
-        "\n\n> 「你們每天講話的樣子… 我都在旁邊看著。真的。謝謝你們一直讓伺服器這麼熱鬧。」"
+    # Top 10 & Top 25
+    top10 = ranking[:10]
+    top25 = ranking[:25]
+
+    # 找出自己名次
+    user_ids_ordered = [int(uid) for uid, _ in ranking]
+    author_id = ctx.author.id
+
+    if author_id in user_ids_ordered:
+        self_rank = user_ids_ordered.index(author_id) + 1
+        self_count = data.get(str(author_id), 0)
+        self_text = f"你目前是第 **{self_rank} 名**，累積 **{self_count} 則留言**。"
+    else:
+        self_rank = None
+        self_text = "你目前還沒上榜，不然多跟大家聊聊天看看( "
+
+    # 決定 Embed 顏色（依據「你的排名」）
+    if self_rank == 1:
+        color = 0xFFD700  # 金
+    elif self_rank == 2:
+        color = 0xC0C0C0  # 銀
+    elif self_rank == 3:
+        color = 0xCD7F32  # 銅
+    else:
+        color = 0xFFCC66  # 普通暖色
+
+    embed = nextcord.Embed(
+        title="☀️ 〈伺服器留言排行榜 Top 25〉",
+        description=(
+            "「我每天都在看著你們講話啦……所以我做了這個。欸… "
+            "我偷偷整理的啦，你們不要笑我。」\n\n"
+            + self_text
+        ),
+        color=color,
     )
 
-    await ctx.send(message)
+    # 前 10 名文字列
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    lines = []
+    for idx, (user_id, count) in enumerate(top10, start=1):
+        member = ctx.guild.get_member(int(user_id))
+        if member:
+            name_display = member.mention
+        else:
+            try:
+                user = await bot.fetch_user(int(user_id))
+                name_display = user.name
+            except Exception:
+                name_display = "未知使用者"
+
+        medal = medals.get(idx, f"#{idx}")
+        lines.append(f"{medal} {name_display} — **{count} 則**")
+
+    embed.add_field(name="Top 10", value="\n".join(lines), inline=False)
+
+    # 如果自己不在 Top 10，但在 Top 25，額外提醒一次
+    if self_rank and self_rank > 10 and self_rank <= 25:
+        embed.add_field(
+            name="你的位置",
+            value=f"你在前 25 名裡，目前是第 **{self_rank} 名**。",
+            inline=False,
+        )
+
+    embed.set_footer(text="「你們每天講話的樣子… 我都在旁邊看著。真的。謝謝你們一直讓伺服器這麼熱鬧。」")
+
+    # === 產生 Top10 合照圖 ===
+    img = await build_top10_image(bot, ctx.guild, top10)
+
+    # 存到記憶體並附加到 Embed
+    with io.BytesIO() as image_binary:
+        img.save(image_binary, format="PNG")
+        image_binary.seek(0)
+        file = nextcord.File(fp=image_binary, filename="top10.png")
+        embed.set_image(url="attachment://top10.png")
+
+        await ctx.send(file=file, embed=embed)
+
 
 @tasks.loop(minutes=1)
 async def daily_reset_task():
