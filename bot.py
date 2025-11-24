@@ -106,11 +106,22 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_ready():
     print(f"🤖 Bot 已啟動：{bot.user} (ID: {bot.user.id})")
 
+    # ---- 同步 Slash 指令 ----
     try:
         synced = await bot.sync_application_commands()
         print(f"🔧 已成功同步 {len(synced)} 個 Slash 指令")
     except Exception as e:
         print("❌ 同步指令時發生錯誤：", e)
+
+    # ---- 啟動排程 ----
+    if not send_daily_message.is_running():
+        send_daily_message.start()
+        daily_reset_task.start()
+        weekly_report_task.start()
+        monthly_report_task.start()
+
+    print("🟢 所有系統啟動完成。")
+
 
 # 🎲 賭博系統（簡潔 Style C Embed＋規則＆操作按鈕）
 # 以下為示範結構（請按照你 bot 原本的架構貼入）
@@ -1297,16 +1308,6 @@ def is_keyword_triggered(keyword: str, text: str) -> bool:
     pattern = rf"^{re.escape(kw)}($|\s|[!！?.。～,，…]+)"
     return re.match(pattern, text) is not None
 
-
-@bot.event
-async def on_ready():
-    print(f"✅ 已登入：{bot.user} (ID: {bot.user.id})")
-    if not send_daily_message.is_running():
-        send_daily_message.start()
-        daily_reset_task.start()
-        weekly_report_task.start()
-        monthly_report_task.start()
-        print("統計系統已啟動。")
 
 
 
