@@ -2420,7 +2420,7 @@ class RulesButtonView(nextcord.ui.View):
     color=0x2f3136
 )
 
-embed.description = """
+        embed.description = """
 **【456（最大）】**
 ・擲出者贏三倍
 ・閒家可擲出 456 才能平手
@@ -2440,7 +2440,6 @@ embed.description = """
 ・三顆不同→重骰最多三次→仍不同＝0 點
 """
 
-        
         await inter.response.send_message(embed=embed, ephemeral=True)
 
     @nextcord.ui.button(label="🕹️ 操作方式", style=nextcord.ButtonStyle.blurple)
