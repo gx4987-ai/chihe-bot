@@ -2982,14 +2982,6 @@ async def reset_gamble(inter: Interaction):
 
     await inter.response.send_message(embed=embed)
 
-@bot.event
-async def on_ready():
-    print("Bot is ready.")
-    try:
-        synced = await bot.sync_application_commands()
-        print(f"已同步 {len(synced)} 個 Slash 指令")
-    except Exception as e:
-        print(e)
 
 # ============================================================
 # 導出函式給主程式使用
