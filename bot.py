@@ -1069,12 +1069,6 @@ async def monthly_report_task():
         print("每月統計已重置。")
 
 
-@bot.command(name="記錄", aliases=["記一下", "記", "紀錄"])
-async def remember_cmd(ctx: commands.Context, *, text: str):
-    """幫你把一句話記起來，之後可以用 !語錄 看。"""
-    add_user_note(ctx.author.id, text)
-    await ctx.send(f"{ctx.author.mention} 好，我記得了( ")
-
 
 @bot.command(name="語錄", aliases=["小語錄"])
 async def show_notes_cmd(ctx: commands.Context):
