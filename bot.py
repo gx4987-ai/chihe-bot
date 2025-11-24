@@ -363,7 +363,7 @@ async def stats_rank(inter: Interaction):
     await inter.response.send_message(embed=embed)
 
 # ===== /賭博（開局） =====
-@@bot.slash_command(
+@bot.slash_command(
     name="賭博", 
     description="建立或查看目前的賭局狀態"
 )
