@@ -21,7 +21,26 @@ import json
 import os
 
 
+# ---- 近 90 天留言統計（畫圖用） ----
+from collections import defaultdict
+from datetime import datetime, timedelta
+
+DAILY_MESSAGE_COUNT = defaultdict(int)  # {"2025-01-03": 83, ...}
+
+
 MESSAGE_FILE = "messages.json"
+
+
+def load_json(filename):
+    if not os.path.exists(filename):
+        return {}
+    with open(filename, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_json(filename, data):
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
 
 
 def load_messages():
@@ -333,7 +352,6 @@ CHANNEL_MESSAGE_COUNT: Dict[int, int] = {}      # 每個頻道訊息數
 
 
 def update_message_stats(message: nextcord.Message) -> None:
-    """在 on_message 裡每次呼叫，更新生活化統計。"""
     uid = message.author.id
     chid = message.channel.id
 
@@ -343,60 +361,178 @@ def update_message_stats(message: nextcord.Message) -> None:
     if is_night_mode():
         USER_NIGHT_MESSAGE_COUNT[uid] = USER_NIGHT_MESSAGE_COUNT.get(uid, 0) + 1
 
+    # ★ 記錄每日總量 ★
+    day_key = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d")
+    DAILY_MESSAGE_COUNT[day_key] += 1
 
-@bot.command(name="小報告")
-async def life_report(ctx: commands.Context):
-    """千惠的伺服器生活化小報告。"""
+
+
+@bot.command(name="今日小報告", aliases=["今日報告", "伺服器小報告"])
+async def today_report(ctx: commands.Context):
+    """千惠的當日伺服器小報告。"""
+
+    # 如果沒有任何紀錄
     if not USER_MESSAGE_COUNT:
-        await ctx.send("我這邊的觀察紀錄還太少，再陪我聊久一點，我再跟你們報告( ")
+        await ctx.send("欸…我今天好像還沒看到什麼東西，再陪我說說話啦( ")
         return
 
-    # Top talker
-    top_talkers = sorted(
-        USER_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True
-    )[:5]
+    # 今日總訊息量
+    total_messages = sum(USER_MESSAGE_COUNT.values())
 
-    # 深夜 Top
-    top_night = sorted(
-        USER_NIGHT_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True
-    )[:3]
+    # Top talkers（前 10 名）
+    top_talkers = sorted(USER_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True)[:10]
 
-    # 頻道最吵
-    top_channels = sorted(
-        CHANNEL_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True
-    )[:3]
+    # Top 深夜講話（前 5 名）
+    top_night = sorted(USER_NIGHT_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    # 最吵的頻道（前 5 名）
+    top_channels = sorted(CHANNEL_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    # 今天最常 tag 別人的人
+    tag_count: Dict[int, int] = {}
+    for uid, data in MEMORY.get("today_tags", {}).items():
+        tag_count[int(uid)] = data
+
+    top_taggers = sorted(tag_count.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    # 今天最常找千惠的人
+    today_chihui_calls = MEMORY.get("today_chihui", {})  # {uid: 次數}
+    top_chihui_callers = sorted(today_chihui_calls.items(), key=lambda x: x[1], reverse=True)[:3]
+
+    # 千惠式旁白（隨機）
+    comments = [
+        "我都在旁邊偷偷看著啦，你們真的很吵，但…有點可愛( ",
+        "今天伺服器的氣氛還不錯，我喜歡這樣的感覺( ",
+        "你們今天是不是又偷熬夜，去睡覺啦笨蛋( ",
+        "我覺得你們講話講的比我在軍中跑步還累欸( ",
+    ]
+
+    import random
+    comment = random.choice(comments)
 
     embed = nextcord.Embed(
-        title="📝 千惠的小報告",
-        description="我這陣子偷看的觀察紀錄( ",
-        color=0xF5B642,
+        title="📊 《千惠的當日伺服器小報告》",
+        description=comment,
+        color=0xFFC03A,
     )
 
-    if top_talkers:
-        lines = []
-        for i, (uid, cnt) in enumerate(top_talkers, start=1):
-            lines.append(f"{i}. <@{uid}>：**{cnt}** 則訊息")
-        embed.add_field(name="說話最多的人", value="\n".join(lines), inline=False)
+    # 總量
+    embed.add_field(
+        name="📝 今日總訊息量",
+        value=f"{total_messages} 則",
+        inline=False,
+    )
 
-    if top_night:
-        lines = []
-        for i, (uid, cnt) in enumerate(top_night, start=1):
-            lines.append(f"{i}. <@{uid}>：**{cnt}** 則深夜訊息")
-        embed.add_field(name="深夜還不睡的人", value="\n".join(lines), inline=False)
+    # Top talkers
+    talker_lines = []
+    for uid, count in top_talkers:
+        talker_lines.append(f"<@{uid}>：{count} 則")
+    embed.add_field(
+        name="💬 今天講最多話的人（前十名）",
+        value="\n".join(talker_lines) if talker_lines else "無資料",
+        inline=False,
+    )
 
-    if top_channels:
-        lines = []
-        for i, (chid, cnt) in enumerate(top_channels, start=1):
-            lines.append(f"{i}. <#{chid}>：**{cnt}** 則訊息")
-        embed.add_field(name="最吵的地方", value="\n".join(lines), inline=False)
+    # 深夜不睡覺
+    night_lines = []
+    for uid, count in top_night:
+        night_lines.append(f"<@{uid}>：{count} 則")
+    embed.add_field(
+        name="🌙 深夜不睡覺榜（前 5 名）",
+        value="\n".join(night_lines) if night_lines else "大家都有乖乖睡( ",
+        inline=False,
+    )
+
+    # 頻道
+    channel_lines = []
+    for chid, count in top_channels:
+        channel_lines.append(f"<#{chid}>：{count} 則")
+    embed.add_field(
+        name="📢 今天最吵的頻道（前 5 名）",
+        value="\n".join(channel_lines) if channel_lines else "今天伺服器特別安靜欸( ",
+        inline=False,
+    )
+
+    # 最常 tag 人
+    tag_lines = []
+    for uid, count in top_taggers:
+        tag_lines.append(f"<@{uid}>：{count} 次")
+    embed.add_field(
+        name="📎 今天最常 tag 別人的人",
+        value="\n".join(tag_lines) if tag_lines else "今天大家好像都很低調欸( ",
+        inline=False,
+    )
+
+    # 最常找千惠
+    chihui_lines = []
+    for uid, count in top_chihui_callers:
+        chihui_lines.append(f"<@{uid}>：{count} 次")
+    embed.add_field(
+        name="💗 今天最常找千惠的人",
+        value="\n".join(chihui_lines) if chihui_lines else "沒人找我…好孤單||個毛||( ",
+        inline=False,
+    )
 
     await ctx.send(embed=embed)
+
+
+
+
+import matplotlib.pyplot as plt
+import io
+
+@bot.command(name="留言走勢", aliases=["訊息走勢", "伺服器走勢"])
+async def message_trend(ctx: commands.Context):
+
+    # 若統計量太少
+    if len(DAILY_MESSAGE_COUNT) < 3:
+        await ctx.send("欸……目前資料還有點少，我再觀察一陣子再給你看好不好( ")
+        return
+
+    # 取近 90 天
+    today = datetime.now(TAIPEI_TZ).date()
+    days_ago_90 = today - timedelta(days=90)
+
+    # 過濾區間
+    filtered = {
+        day: count
+        for day, count in DAILY_MESSAGE_COUNT.items()
+        if datetime.strptime(day, "%Y-%m-%d").date() >= days_ago_90
+    }
+
+    # 排序
+    sorted_days = sorted(filtered.keys())
+    x = sorted_days
+    y = [filtered[day] for day in sorted_days]
+
+    # 畫圖
+    plt.figure(figsize=(10, 4))
+    plt.plot(x, y, linewidth=2)
+    plt.xticks(rotation=45, fontsize=8)
+    plt.title("近 90 天留言走勢圖", fontsize=14)
+    plt.tight_layout()
+
+    # 存到 BytesIO
+    img_bytes = io.BytesIO()
+    plt.savefig(img_bytes, format="png")
+    img_bytes.seek(0)
+    plt.close()
+
+    file = nextcord.File(img_bytes, filename="msg_trend.png")
+
+    # 千惠語氣
+    await ctx.send(
+        "欸我這段時間在旁邊看你們鬧得蠻開心的，給你看一下最近 90 天的留言走勢( ",
+        file=file
+    )
+
+
 
 
 # ---------- 3. 千惠可愛反應包（輕量版） ----------
 
 REACTION_TRIGGERS = {
-    "我回來": [
+    "回來了": [
         "嗯，歡迎回來( ",
         "你回來了喔，那就先在這裡坐一下吧( ",
     ],
@@ -535,6 +671,98 @@ async def show_notes_cmd(ctx: commands.Context):
 
 # 啟動時就先把記憶載進來
 load_memory()
+
+@bot.command(name="我的留言", aliases=["我講了多少", "個人統計", "留言數"])
+async def personal_stats(ctx: commands.Context):
+    """顯示個人的留言統計。"""
+
+    uid = ctx.author.id
+
+    total = USER_MESSAGE_COUNT.get(uid, 0)
+    night = USER_NIGHT_MESSAGE_COUNT.get(uid, 0)
+
+    # 如果完全沒有紀錄
+    if total == 0:
+        await ctx.send(f"{ctx.author.mention} 你在這裡講話還太少，我根本抽不出你的樣子啦( ")
+        return
+
+    # ------ 計算排名 ------
+    sorted_users = sorted(
+        USER_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True
+    )
+    rank = next((i for i, (u, _) in enumerate(sorted_users, start=1) if u == uid), None)
+
+    # ------ 千惠式分析 ------
+    rank_comment = ""
+    if rank == 1:
+        rank_comment = "…你是這裡最吵的那個，我每天都看得到你，但謝了w( "
+    elif rank <= 5:
+        rank_comment = "你一直都是活躍的那幾個呢…我其實一直知道你很常來找大家講話呢( "
+    elif rank <= 15:
+        rank_comment = "還可以吧，但沒事啦，我看得出你偶爾會忙啦，有空再來就好( "
+    else:
+        rank_comment = "中後段，會讓我覺得你是不是太累了，還好你偶爾會來找我一下( "
+
+    night_comment = ""
+    if night > 30:
+        night_comment = "還有…你深夜講話真的很多，你是不是都不睡覺？記得要多睡覺捏( "
+    elif night > 10:
+        night_comment = "深夜訊息有一點，但還不算太誇張…不可以太晚睡啦，我會生氣喔( "
+    else:
+        night_comment = "深夜很少看到你，這樣比較好，至少你睡得比我放心( "
+
+    embed = nextcord.Embed(
+        title=f"📘 你的個人留言統計 · 千惠版",
+        color=0xFFB7C5
+    )
+
+    embed.add_field(name="你的總留言數", value=f"{total} 則", inline=False)
+    embed.add_field(name="你的排名", value=f"第 **{rank} 名**", inline=False)
+    embed.add_field(name="深夜留言", value=f"{night} 則", inline=False)
+
+    embed.add_field(
+        name="千惠偷偷補一句：",
+        value=f"{rank_comment}\n{night_comment}",
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
+
+
+@bot.command()
+async def top(ctx):
+    """千惠的留言排行榜 Top 25"""
+
+    # 防呆：檢查檔案是否存在
+    if not os.path.exists("user_message_counts.json"):
+        await ctx.send("紀錄檔不存在喔… 我沒有辦法算排行榜。")
+        return
+
+    # 讀取檔案
+    with open("user_message_counts.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # 排序
+    sorted_users = sorted(data.items(), key=lambda x: x[1], reverse=True)
+    top25 = sorted_users[:25]
+
+    # 建立訊息
+    lines = []
+    rank = 1
+    for user_id, count in top25:
+        user = ctx.guild.get_member(int(user_id))
+        username = user.mention if user else f"未知使用者({user_id})"
+        lines.append(f"{rank}. {username} — **{count} 則**")
+        rank += 1
+
+    message = (
+        "🌟 **《伺服器留言排行榜 Top 25》**\n"
+        "> 「我每天都在看著你們講話啦……所以我做了這個。欸… 我偷偷整理的啦，你們不要笑我。」\n\n"
+        + "\n".join(lines) +
+        "\n\n> 「你們每天講話的樣子… 我都在旁邊看著。真的。謝謝你們一直讓伺服器這麼熱鬧。」"
+    )
+
+    await ctx.send(message)
 
 
 
@@ -701,20 +929,131 @@ async def on_ready():
     print(f"✅ 已登入：{bot.user} (ID: {bot.user.id})")
     if not send_daily_message.is_running():
         send_daily_message.start()
+        daily_reset_task.start()
+        weekly_report_task.start()
+        monthly_report_task.start()
+        print("統計系統已啟動。")
+
 
 
 @bot.event
 async def on_message(message: nextcord.Message):
     if message.author.bot:
         return
+       # === 檔案 ===
+    today_file = "user_message_today.json"
+    week_file = "user_message_week.json"
+    month_file = "user_message_month.json"
 
-    global LAST_REPLY_TIME, LAST_HINT_TIME, MUTE_UNTIL, ABUSE_HINT_COUNT, LAST_EMOTION_REPLY_TIME
+    # === 讀取資料 ===
+    today = load_json(today_file)
+    week = load_json(week_file)
+    month = load_json(month_file)
 
-    content = message.content
-    now_ts = datetime.now().timestamp()
+    user_id = str(message.author.id)
 
-    # 生活化統計（小報告用）
+    # 今日
+    today[user_id] = today.get(user_id, 0) + 1
+    save_json(today_file, today)
+
+    # 本週
+    week[user_id] = week.get(user_id, 0) + 1
+    save_json(week_file, week)
+
+    # 本月
+    month[user_id] = month.get(user_id, 0) + 1
+    save_json(month_file, month)
+
+    await bot.process_commands(message)   
+    # 記錄訊息統計
     update_message_stats(message)
+
+    # -- 記錄今日 tag 次數 --
+    if message.mentions:
+        tags = MEMORY.setdefault("today_tags", {})
+        for user in message.mentions:
+            uid = str(user.id)
+            tags[uid] = tags.get(uid, 0) + 1
+
+    # -- 記錄有人叫千惠（提到 bot 名稱） --
+    if "千惠" in message.content:
+        calls = MEMORY.setdefault("today_chihui", {})
+        uid = str(message.author.id)
+        calls[uid] = calls.get(uid, 0) + 1
+
+    save_memory()
+
+    await bot.process_commands(message)
+
+
+@tasks.loop(minutes=1)
+async def daily_reset_task():
+    now = datetime.now()
+    if now.hour == 0 and now.minute == 0:
+        save_json("user_message_today.json", {})
+        print("每日統計已重置。")
+
+
+
+@tasks.loop(minutes=1)
+async def weekly_report_task():
+    now = datetime.now()
+
+    # 週日 23:59 發佈排行
+    if now.weekday() == 6 and now.hour == 23 and now.minute == 59:
+        data = load_json("user_message_week.json")
+        if not data:
+            return
+
+        # 排名
+        ranking = sorted(data.items(), key=lambda x: x[1], reverse=True)[:10]
+
+        # 公告頻道
+        channel = bot.get_channel(YOUR_CHANNEL_ID)
+
+        msg = "📘 **本週千惠觀察日誌（Top 10）**\n\n"
+        for i, (uid, count) in enumerate(ranking, start=1):
+            msg += f"**{i}.** <@{uid}> — **{count} 則**\n"
+
+        msg += "\n（我都看在眼裡啦，大家記得喝水。）"
+
+        await channel.send(msg)
+
+        # 重置
+        save_json("user_message_week.json", {})
+        print("每週統計已重置。")
+
+
+@tasks.loop(minutes=1)
+async def monthly_report_task():
+    now = datetime.now()
+    tomorrow = now + timedelta(days=1)
+
+    # 判斷是否月末
+    if tomorrow.month != now.month and now.hour == 23 and now.minute == 59:
+        data = load_json("user_message_month.json")
+        if not data:
+            return
+
+        # 排名前15
+        ranking = sorted(data.items(), key=lambda x: x[1], reverse=True)[:15]
+
+        # 公告頻道
+        channel = bot.get_channel(YOUR_CHANNEL_ID)
+
+        msg = "📙 **本月千惠觀察報告（Top 15）**\n\n"
+        for i, (uid, count) in enumerate(ranking, start=1):
+            msg += f"**{i}.** <@{uid}> — **{count} 則**\n"
+
+        msg += "\n（下個月也…一起加油吧。）"
+
+        await channel.send(msg)
+
+        # 重置
+        save_json("user_message_month.json", {})
+        print("每月統計已重置。")
+
+
 
     responded = False  # 這次訊息 bot 有沒有已經回覆過
 
@@ -798,8 +1137,7 @@ async def on_message(message: nextcord.Message):
             if reacted:
                 responded = True
 
-    # 讓其他指令（!xxx）正常運作
-    await bot.process_commands(message)
+
 
 @bot.command(name="dailytest")
 async def dailytest(ctx):
@@ -811,6 +1149,7 @@ async def dailytest(ctx):
         await ctx.send("今天在 messages.json 裡沒有找到對應的內容 QQ")
     else:
         await ctx.send(f"【今日預覽】\n{msg}")
+
 
 
 
@@ -1168,6 +1507,9 @@ class StoryView(View):
         )
 
         await interaction.response.send_message(msg)
+
+
+
 
 
 @bot.command(name="story", aliases=["故事接龍"])
