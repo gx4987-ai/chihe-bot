@@ -2471,54 +2471,63 @@ class RulesButtonView(nextcord.ui.View):
 # ===== 勝敗結算 + 最後一人強制結束 =====
 
 def apply_win_lose(data, winner_uid=None, loser_uid=None):
-    """為勝者 +1 win，敗者 +1 lose"""
+    """勝利者 +1 win，失敗者 +1 lose"""
     if winner_uid and winner_uid in data["players"]:
         data["players"][winner_uid]["win"] = data["players"][winner_uid].get("win", 0) + 1
-
     if loser_uid and loser_uid in data["players"]:
         data["players"][loser_uid]["lose"] = data["players"][loser_uid].get("lose", 0) + 1
 
 
-def force_end_if_last_player(data):
-    """如果只剩一名點數>0玩家，強制結束賭局並重置點數（保留勝敗）"""
+async def force_end_if_last_player(ctx, data):
+    """
+    如果只剩下一名點數 > 0 的玩家 → 強制結束賭局（保留勝敗紀錄）
+    """
     alive = []
+
+    # 找出還沒破產的玩家
     for uid, p in data["players"].items():
         if p.get("points", 0) > 0 and not p.get("bankrupt"):
             alive.append(uid)
 
-    # 只剩一人 → 強制結束
+    # 如果只剩 1 人 → 強制結束
     if len(alive) == 1:
         winner_uid = alive[0]
         winner_name = data["players"][winner_uid]["name"]
 
-        # 重置點數（勝敗保留）
+        # 幫所有破產的玩家補上敗場（你若不想補，可以拿掉）
+        for uid, p in data["players"].items():
+            if uid != winner_uid:
+                apply_win_lose(data, winner_uid=winner_uid, loser_uid=uid)
+
+        # === 美美的強制結束公告 ===
+        embed = nextcord.Embed(
+            title="🎉 本局結算完成",
+            description=(
+                f"本局已進入結算階段，因為只剩 **{winner_name}** 還有點數！\n\n"
+                f"🏆 恭喜本局存活者：**{winner_name}**！\n"
+                f"（勝敗紀錄已更新。）"
+            ),
+            color=0xFFD700
+        )
+        embed.set_footer(text="系統已自動結束本局遊戲")
+
+        await ctx.send(embed=embed)
+
+        # === 重置賭局資料（不清勝敗） ===
+        data["bets"] = {}
+        data["ready"] = False
+        data["banker_index"] = 0
+
+        # 重新給所有玩家 5000 點（你原本的設定）
         for uid, p in data["players"].items():
             p["points"] = 5000
             if "bankrupt" in p:
                 del p["bankrupt"]
 
-        # 清除當前對局
-        data["bets"] = {}
-        data["ready"] = False
-        data["banker_index"] = 0
+        save_game(data)
+        return True  # 代表強制結束已發生
 
-        save_gamble(data)
-
-        # Embed 公告
-        embed = nextcord.Embed(title="🏆 賭局強制結束", color=0xffd700)
-        embed.description = (
-            f"最終倖存玩家為 **{winner_name}**！\n"
-            "賭局已自動重置，可重新開始。"
-        )
-        return embed
-
-    return None
-
-
-
-def force_end_if_last_player(data):
-
-
+    return False  # 沒有強制結束
 
 
 
