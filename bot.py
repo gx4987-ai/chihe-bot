@@ -2492,12 +2492,17 @@ class StartDiceButton(nextcord.ui.View):
             return
 
         # ===== 莊家擲骰 =====
+        # ===== 莊家擲骰 =====
         d = roll3()
         info = classify(d)
 
         embed = nextcord.Embed(title="🎲 莊家擲骰", color=0xffffff)
-        embed.add_field(name="莊家擲出", value=" ".join(dice_emoji[x] for x in d))+f"
-牌型：{info['type']}", inline=False)
+        embed.add_field(
+            name="莊家擲出",
+            value=" ".join(dice_emoji[x] for x in d) + f"\n牌型：{info['type']}",
+            inline=False
+        )
+
 
         # ===== 莊家123：閒家不骰 → 莊家付兩倍 =====
         if info["type"] == "123":
@@ -2516,7 +2521,8 @@ class StartDiceButton(nextcord.ui.View):
             for pid, bet in data["bets"].items():
                 pd = roll3()
                 pi = classify(pd)
-                text += f"**{data['players'][pid]['name']}** → {' '.join(dice_emoji[x] for x in pd)}（{pi['type']}）
+                text += f"**{data['players'][pid]['name']}** → {' '.join(dice_emoji[x] for x in pd)} （{pi['type']}）\n"
+
 "
                 if pi["type"] == "456":
                     text += "→ 平手
