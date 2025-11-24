@@ -146,6 +146,7 @@ NIGHT_MODE_REPLIES = {
     "tired": [
         "…你這語氣，感覺是真的累到心裡去了，你先躺一下，什麼都先別想那麼多( ",
         "深夜的累會比白天放大很多倍，你不用撐著裝沒事，在這邊軟一下也可以( ",
+        "辛苦了，今天已經用盡全力了吧，明天也要好好加油喔",
         "嗯…我聽得出來你今天真的過得不太輕鬆，你可以慢慢跟我說到你想停為止就好( "
     ],
     "neutral": [
@@ -207,14 +208,14 @@ async def try_greeting_reply(message: nextcord.Message):
     if any(word in content for word in GOOD_MORNING_WORDS):
         if now - greeting_last_trigger["morning"] >= GREETING_COOLDOWN:
             greeting_last_trigger["morning"] = now
-            await message.reply("早安，你今天還好吧( ")
+            await message.reply("早安，你今天還可以嗎? ")
         return  # 冷卻中 → 完全安靜，不回覆
 
     # --- 午安 ---
     if any(word in content for word in GOOD_AFTERNOON_WORDS):
         if now - greeting_last_trigger["noon"] >= GREETING_COOLDOWN:
             greeting_last_trigger["noon"] = now
-            await message.reply("午安，記得稍微休息一下( ")
+            await message.reply("午安，記得稍微休息一下喔( ")
         return
 
     # --- 晚安 ---
@@ -226,9 +227,6 @@ async def try_greeting_reply(message: nextcord.Message):
 
 
 EMOTION_KEYWORD_REPLIES: Dict[str, str] = {
-    "好累": "聽起來是真的有點撐太久了，你要不要先停一下喘口氣，再慢慢跟我講發生什麼事( ",
-    "好煩": "那種煩到心裡悶住的感覺，我大概猜得到一點…你想講講看嗎( ",
-    "壓力好大": "確實有時候壓力會一下子全部壓上來，你不用馬上把一切處理好，先讓自己穩住比較重要( ",
     "不想動": "還好吧，不想動的時候通常是真的累了，你可以先放著不管一下，等身體比較願意再說也沒關係( ",
     "抱抱": "今天也撐到現在了，你可以不用那麼硬撐，過來這邊一下(抱 ",
     "不想念書": "不想念的時候硬坐在書桌前也進不去，不然你先離開一下，等腦袋沒那麼吵再回來也可以( ",
@@ -238,6 +236,7 @@ EMOTION_KEYWORD_REPLIES: Dict[str, str] = {
     "大草": "大草",
     "開心": "那是肯定的，你開心的話我也會比較放心一點( ",
     "拆家": "能不能別拆了天( ",
+    "千惠": "hi ",
 }
 
 
@@ -385,11 +384,11 @@ REACTION_TRIGGERS = {
         "那要不要玩點什麼？我這邊有一些奇怪的遊戲可以試試看( ",
         "無聊到跑來找我，其實我有一點開心( ",
     ],
-    "肚子餓": [
+    "餓": [
         "那就先去吃東西，聊天可以等，肚子不能等( ",
         "餓著的時候什麼都會變得更煩，先填飽肚子再說( ",
     ],
-    "我好冷": [
+    "好冷": [
         "那你多穿一點，或者縮在被子裡，手機可以拿遠一點沒關係( ",
         "冷的時候會特別想有人在旁邊，我暫時先算半個( ",
     ],
@@ -540,7 +539,13 @@ DAILY_MISSIONS = [
     "允許自己發呆三分鐘，什麼都不做也可以。",
     "把手機放下五分鐘，只聽一下周圍的聲音。",
     "跟一個人說『辛苦了』，不一定要解釋原因。",
-    "睡前對自己說一句『今天這樣就夠了』。",
+    "找一個沒有人的空間深呼吸一分鐘",
+    "稍微多走一點路回家吧?",
+    "洗澡時試著把面子丟在一邊唱首歌吧",
+    "今天就犒賞自己吃點炸物吧",
+    "找到平常最照顧自己的人，說聲謝謝",
+    "找到沒有在垃圾筒的垃圾且把他丟進去吧",
+    "嘗試跟千惠說句心底話",
 ]
 
 
@@ -946,7 +951,7 @@ async def top(ctx: commands.Context):
     else:
         color = 0xFFCC66  # 普通暖色
 
-    embed = nextcord.Embed(title="按一下以了解更多 〈伺服器留言排行榜 Top 25〉",
+    embed = nextcord.Embed(title="〈避難所留言排行榜 Top 25〉",
         description=(
             "「我每天都在看著你們講話啦……所以我做了這個。欸… "
             "我偷偷整理的啦，你們不要笑我。」\n\n"
@@ -2362,6 +2367,227 @@ class StoryCog(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
+# 🎲 賭博系統（簡潔 Style C Embed＋規則＆操作按鈕）
+# 以下為示範結構（請按照你 bot 原本的架構貼入）
+
+import nextcord
+from nextcord.ext import commands
+from nextcord import Interaction, SlashOption
+import json, os, random
+
+# ＝＝＝資料處理＝＝＝
+GAMBLE_FILE = "gamble_data.json"
+
+def load_gamble():
+    if not os.path.exists(GAMBLE_FILE):
+        return {"players": {}, "order": [], "banker_index": 0, "bets": {}, "ready": False}
+    with open(GAMBLE_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_gamble(data):
+    with open(GAMBLE_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+# ===== 骰子 =====
+dice_emoji = {i:f"🎲{i}" for i in range(1,7)}
+
+def roll3():
+    return [random.randint(1,6) for _ in range(3)]
+
+# ===== 賭博骰子分類 =====
+def classify(d):
+    s = sorted(d)
+    if s == [4,5,6]: return {"type":"456","value":999}
+    if s == [1,2,3]: return {"type":"123","value":-1}
+    if d[0]==d[1]==d[2]: return {"type":"all","value":d[0]}
+    if d[0]==d[1]: return {"type":"pair","value":d[2]}
+    if d[0]==d[2]: return {"type":"pair","value":d[1]}
+    if d[1]==d[2]: return {"type":"pair","value":d[0]}
+    for _ in range(3):
+        nd = roll3()
+        if nd[0]==nd[1] or nd[0]==nd[2] or nd[1]==nd[2]:
+            return classify(nd)
+    return {"type":"none","value":0}
+
+# ===== 規則 Embed =====
+class RulesButtonView(nextcord.ui.View):
+    def __init__(self): super().__init__(timeout=None)
+
+    @nextcord.ui.button(label="📘 遊戲規則", style=nextcord.ButtonStyle.gray)
+    async def rules(self, btn, inter):
+        embed = nextcord.Embed(title="🎲 賭博骰子規則（簡潔版）", color=0x2f3136)
+        embed.description = (
+        "**【456（最大）】**
+"
+        "・擲出者贏三倍
+"
+        "・閒家可擲出 456 才能平手
+"
+        "
+"
+        "**【123（最小）】**
+"
+        "・擲出者輸兩倍
+"
+        "・若莊家 123 → 閒家不用骰，直接收兩倍
+"
+        "
+"
+        "**【全色（111,222~666）】**
+"
+        "・點數＝骰面
+"
+        "・111→贏五倍 / 222~666→贏三倍
+"
+        "
+"
+        "**【平色】**
+"
+        "・兩顆相同→第三顆為點數
+"
+        "
+"
+        "**【無點】**
+"
+        "・三顆不同→重骰最多三次→仍不同＝0 點"
+        )
+        await inter.response.send_message(embed=embed, ephemeral=True)
+
+    @nextcord.ui.button(label="🕹️ 操作方式", style=nextcord.ButtonStyle.blurple)
+    async def howto(self, btn, inter):
+        embed = nextcord.Embed(title="🕹️ 操作方式", color=0x2f3136)
+        embed.description = (
+        "**/加入賭局** → 加入遊戲（起始 5000 點）
+"
+        "**/下注 數字** → 閒家下注
+"
+        "下注完成後 → 系統自動跳出『開始擲骰』按鈕給莊家
+"
+        "
+"
+        "**莊家按按鈕 → 開始擲骰 & 結算**
+"
+        "
+"
+        "**/擲骰、/3d6** → 玩家自由骰（與賭局無關）"
+        )
+        await inter.response.send_message(embed=embed, ephemeral=True)
+
+# ===== UI（莊家開骰） =====
+class StartDiceButton(nextcord.ui.View):
+    def __init__(self): super().__init__(timeout=None)
+
+    @nextcord.ui.button(label="開始擲骰（莊家專用）", style=nextcord.ButtonStyle.green)
+    async def start(self, btn, inter):
+        data = load_gamble()
+        banker_uid = data["order"][data["banker_index"]]
+        if inter.user.id != int(banker_uid):
+            await inter.response.send_message("只有莊家能按這個按鈕！", ephemeral=True)
+            return
+        if not data["ready"]:
+            await inter.response.send_message("所有閒家尚未下注完畢。", ephemeral=True)
+            return
+
+        # ===== 莊家擲骰 =====
+        d = roll3()
+        info = classify(d)
+
+        embed = nextcord.Embed(title="🎲 莊家擲骰", color=0xffffff)
+        embed.add_field(name="莊家擲出", value=" ".join(dice_emoji[x] for x in d))+f"
+牌型：{info['type']}", inline=False)
+
+        # ===== 莊家123：閒家不骰 → 莊家付兩倍 =====
+        if info["type"] == "123":
+            total_pay = 0
+            for pid, bet in data["bets"].items():
+                pay = bet * 2
+                data["players"][pid]["points"] += pay
+                total_pay += pay
+            data["players"][banker_uid]["points"] -= total_pay
+            embed.add_field(name="結果", value=f"莊家擲出 123 → 無條件輸兩倍！
+莊家扣除：{total_pay}", inline=False)
+
+        # ===== 莊家456：閒家可骰，骰到456平手 =====
+        elif info["type"] == "456":
+            text = ""
+            for pid, bet in data["bets"].items():
+                pd = roll3()
+                pi = classify(pd)
+                text += f"**{data['players'][pid]['name']}** → {' '.join(dice_emoji[x] for x in pd)}（{pi['type']}）
+"
+                if pi["type"] == "456":
+                    text += "→ 平手
+
+"
+                else:
+                    lose = bet * 3
+                    data["players"][pid]["points"] -= lose
+                    data["players"][banker_uid]["points"] += lose
+                    text += f"→ 閒家輸三倍：-{lose}
+
+"
+            embed.add_field(name="結果", value=text, inline=False)
+
+        # ===== 一般情況 =====
+        else:
+            banker_val = info["value"]
+            text=""
+            for pid, bet in data["bets"].items():
+                pd = roll3()
+                pi = classify(pd)
+                text += f"**{data['players'][pid]['name']}** → {' '.join(dice_emoji[x] for x in pd)}（{pi['type']}）
+"
+
+                # 閒家456
+                if pi["type"] == "456":
+                    win = bet * 3
+                    data["players"][pid]["points"] += win
+                    data["players"][banker_uid]["points"] -= win
+                    text += f"→ 閒家456，贏三倍：+{win}
+
+"
+                    continue
+
+                # 閒家123
+                if pi["type"] == "123":
+                    lose = bet * 2
+                    data["players"][pid]["points"] -= lose
+                    data["players"][banker_uid]["points"] += lose
+                    text += f"→ 閒家123，輸兩倍：-{lose}
+
+"
+                    continue
+
+                # 一般比大小
+                pv = pi["value"]
+                if pv > banker_val:
+                    data["players"][pid]["points"] += bet
+                    data["players"][banker_uid]["points"] -= bet
+                    text += f"→ 閒家贏：+{bet}
+
+"
+                elif pv < banker_val:
+                    data["players"][pid]["points"] -= bet
+                    data["players"][banker_uid]["points"] += bet
+                    text += f"→ 閒家輸：-{bet}
+
+"
+                else:
+                    text += "→ 平手
+
+"
+
+            embed.add_field(name="結果", value=text, inline=False)
+
+        # ===== 重置 & 輪莊 =====
+        data["bets"] = {}
+        data["ready"] = False
+        data["banker_index"] = (data["banker_index"] + 1) % len(data["order"])
+        save_gamble(data)
+
+        await inter.response.send_message(embed=embed, view=RulesButtonView())
+
+
 # ============================================================
 # 導出函式給主程式使用
 # ============================================================
@@ -2377,10 +2603,10 @@ async def help(ctx):
     📘 **千惠 Bot 指令一覽**
 
     🎴 一般指令
-    !ping — 檢查 bot 是否在線
-    !megumin <訊息> — 讓千惠用惠惠語氣回覆你
     !draw — 今日運勢抽籤
+    !遠征 — 去打敗boss吧!
     !遠征排行 — 查看遠征傷害排行榜
+    !每日任務 — 不知道自己要幹嘛時就領個任務吧
 
     🌸 故事接龍（Slash 指令）
     /story — 開啟故事接龍控制面板
@@ -2397,6 +2623,14 @@ async def help(ctx):
     📝 生活化數據
     !report — 顯示今天的聊天統計數據
     !daily_report — 查看每日訊息統計
+    !我的留言 — 想看看自己有多吵嗎
+    !今日小報告 — 群組的每日小報告喔
+    !留言走勢 — 不要太常用拜託了
+
+
+
+
+
 
     """
 
