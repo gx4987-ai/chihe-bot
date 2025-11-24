@@ -2464,6 +2464,45 @@ class RulesButtonView(nextcord.ui.View):
 
         await inter.response.send_message(embed=embed, ephemeral=True)
 
+
+# ===== /賭博（主介面） =====
+@bot.slash_command(name="賭博", description="開啟賭博主選單（規則 + 操作方式）")
+async def gamble_main(inter: Interaction):
+
+    embed = nextcord.Embed(
+        title="🎲 賭博系統主選單",
+        description="以下是賭博系統的可用操作：",
+        color=0x2f3136
+    )
+
+    embed.add_field(
+        name="📘 基本規則",
+        value="點下方按鈕查看完整骰子規則",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🕹️ 操作方式",
+        value="如何加入、下注、開始遊戲",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🔥 主要指令",
+        value=(
+            "`/加入賭局` — 加入遊戲（5000點）\n"
+            "`/下注 金額` — 閒家下注\n"
+            "`/我的點數` — 查看個人點數\n"
+            "`/賭場排行` — 點數前10名\n"
+            "`/戰績` — 查看自己的勝敗\n"
+            "`/戰績排行` — 勝率前10名"
+        ),
+        inline=False
+    )
+
+    await inter.response.send_message(embed=embed, view=RulesButtonView())
+
+
 # ===== /開始賭博 =====
 @bot.slash_command(name="賭博骰子", description="開始本局賭局（由莊家或GM使用）")
 async def start_gamble(inter: Interaction):
