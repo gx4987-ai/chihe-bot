@@ -2676,6 +2676,50 @@ async def stats_rank(inter: Interaction):
 
     await inter.response.send_message(embed=embed)
 
+# ===== /賭博（開局） =====
+@bot.slash_command(name="賭博", description="建立或查看目前的賭局狀態")
+async def open_gamble(inter: nextcord.Interaction):
+    data = load_gamble()
+
+    # 若無玩家 → 初始化
+    if not data["players"]:
+        data["players"] = {}
+        data["order"] = []
+        data["bets"] = {}
+        data["banker_index"] = 0
+        data["ready"] = False
+        save_gamble(data)
+
+    # 目前莊家
+    banker_name = "（無）"
+    if data["order"]:
+        banker_uid = data["order"][data["banker_index"]]
+        banker_name = data["players"][banker_uid]["name"]
+
+    embed = nextcord.Embed(
+        title="🎲 賭博遊戲（開局 / 狀態）",
+        color=0x2f3136
+    )
+
+    embed.add_field(
+        name="目前莊家",
+        value=banker_name,
+        inline=False
+    )
+
+    if data["order"]:
+        player_list = "\n".join(
+            f"- {data['players'][uid]['name']}：{data['players'][uid]['points']} 點"
+            for uid in data["order"]
+        )
+        embed.add_field(name="玩家清單", value=player_list, inline=False)
+    else:
+        embed.add_field(name="玩家清單", value="目前沒有玩家加入", inline=False)
+
+    embed.set_footer(text="使用 /加入賭局 加入遊戲，閒家完成下注後莊家才能擲骰。")
+
+    await inter.response.send_message(embed=embed)
+
 
 # ===== UI (Rewrite C2 Style) =====
 # ===== /加入賭局 =====
