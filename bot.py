@@ -81,13 +81,21 @@ messages = load_messages()
 intents = nextcord.Intents.default()
 intents.message_content = True  # 記得在 Dev Portal 也要開啟 Message Content Intent
 
+from nextcord.ext import tasks
+
+@tasks.loop(hours=24)
+async def daily_job_task():
+    print("🕒 Daily Job 正在執行…")
+    # 在這裡寫你的每日任務內容
+
 @bot.event
 async def on_ready():
-    print(f"✔️ Bot 已啟動：{bot.user} (ID: {bot.user.id})")
+    print(f"🟢 Bot 已啟動：{bot.user} (ID: {bot.user.id})")
 
-    # 啟動定時任務
-    weekly_report_task.start()
-    daily_job_task.start()
+    # 啟動每日任務
+    if not daily_job_task.is_running():
+        daily_job_task.start()
+
 
     # 同步 slash 指令
     try:
