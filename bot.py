@@ -367,17 +367,39 @@ async def stats_rank(inter: Interaction):
     name="賭博", 
     description="建立或查看目前的賭局狀態"
     )
-async def open_gamble(inter: nextcord.Interaction):
-    data = load_gamble()
+# 安全讀取 JSON
+def safe_load_gamble():
+    """載入 gamble_data.json，若缺少欄位自動補齊避免 KeyError"""
 
-    # 若無玩家 → 初始化
-    if not data["players"]:
+    data = load_gamble()  # ← 正確：載入 JSON
+
+    # ===== 保證必要欄位存在 =====
+    if "players" not in data or not isinstance(data["players"], dict):
         data["players"] = {}
+
+    if "order" not in data or not isinstance(data["order"], list):
         data["order"] = []
+
+    if "bets" not in data or not isinstance(data["bets"], dict):
         data["bets"] = {}
+
+    if "status" not in data:
+        data["status"] = "closed"
+
+    if "creator" not in data:
+        data["creator"] = None
+
+    if "banker_index" not in data:
         data["banker_index"] = 0
+
+    if "ready" not in data:
         data["ready"] = False
-        save_gamble(data)
+
+    # 存回檔案以確保資料格式一致
+    save_gamble(data)
+
+    return data
+
 
     # 目前莊家
     banker_name = "（無）"
