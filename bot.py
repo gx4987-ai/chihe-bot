@@ -2994,8 +2994,8 @@ def setup(bot):
     bot.add_cog(StoryCog(bot))
 
 # 添加 !help 指令顯示所有指令
-@bot.command()
-async def help(ctx):
+@bot.command(myhelp)
+async def myhelp(ctx):
     help_text = """
     📘 **千惠 Bot 指令一覽**
 
