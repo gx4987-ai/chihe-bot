@@ -893,7 +893,7 @@ async def resolve_user_info(bot, guild, user_id: int):
             "mention": user.mention,  # 不在伺服器，用名字即可
             "avatar": user.display_avatar.url
         }
-   except Exception:
+    except Exception:
         return {
             "name": "未知使用者",
             "mention": "未知使用者",
