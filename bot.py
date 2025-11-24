@@ -2464,34 +2464,31 @@ class RulesButtonView(nextcord.ui.View):
 
         await inter.response.send_message(embed=embed, ephemeral=True)
 
+# ===== /開始賭博 =====
 @bot.slash_command(name="賭博骰子", description="開始本局賭局（由莊家或GM使用）")
 async def start_gamble(inter: Interaction):
-data = load_gamble()
+    data = load_gamble()
 
+    # 已有玩家？
+    if not data["order"]:
+        await inter.response.send_message("目前沒有玩家加入賭局，請先用 /加入賭局。", ephemeral=True)
+        return
 
-# 已有玩家？
-if not data["order"]:
-await inter.response.send_message("目前沒有玩家加入賭局，請先用 /加入賭局。", ephemeral=True)
-return
+    # 設定第一位莊家
+    data["banker_index"] = 0
+    data["bets"] = {}
+    data["ready"] = False
+    save_gamble(data)
 
+    banker_uid = data["order"][0]
+    banker_name = data["players"][banker_uid]["name"]
 
-# 設定第一位莊家
-data["banker_index"] = 0
-data["bets"] = {}
-data["ready"] = False
-save_gamble(data)
+    embed = nextcord.Embed(title="🎮 賭局開始！", color=0x2f3136)
+    embed.add_field(name="本局莊家", value=banker_name, inline=False)
+    embed.add_field(name="下一步", value="所有閒家請使用 **/下注 金額** 進行下注。", inline=False)
 
+    await inter.response.send_message(embed=embed, view=RulesButtonView())
 
-banker_uid = data["order"][0]
-banker_name = data["players"][banker_uid]["name"]
-
-
-embed = nextcord.Embed(title="🎮 賭局開始！", color=0x2f3136)
-embed.add_field(name="本局莊家", value=banker_name, inline=False)
-embed.add_field(name="下一步", value="所有閒家請使用 **/下注 金額** 進行下注。", inline=False)
-
-
-await inter.response.send_message(embed=embed, view=RulesButtonView())
 # ===== UI (Rewrite C2 Style) =====
 # C2 賭桌風格完整重寫
 
