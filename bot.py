@@ -981,80 +981,7 @@ async def on_message(message: nextcord.Message):
         uid = str(message.author.id)
         calls[uid] = calls.get(uid, 0) + 1
 
-    save_memory()
-
-    await bot.process_commands(message)
-
-
-@tasks.loop(minutes=1)
-async def daily_reset_task():
-    now = datetime.now()
-    if now.hour == 0 and now.minute == 0:
-        save_json("user_message_today.json", {})
-        print("每日統計已重置。")
-
-
-
-@tasks.loop(minutes=1)
-async def weekly_report_task():
-    now = datetime.now()
-
-    # 週日 23:59 發佈排行
-    if now.weekday() == 6 and now.hour == 23 and now.minute == 59:
-        data = load_json("user_message_week.json")
-        if not data:
-            return
-
-        # 排名
-        ranking = sorted(data.items(), key=lambda x: x[1], reverse=True)[:10]
-
-        # 公告頻道
-        channel = bot.get_channel(YOUR_CHANNEL_ID)
-
-        msg = "📘 **本週千惠觀察日誌（Top 10）**\n\n"
-        for i, (uid, count) in enumerate(ranking, start=1):
-            msg += f"**{i}.** <@{uid}> — **{count} 則**\n"
-
-        msg += "\n（我都看在眼裡啦，大家記得喝水。）"
-
-        await channel.send(msg)
-
-        # 重置
-        save_json("user_message_week.json", {})
-        print("每週統計已重置。")
-
-
-@tasks.loop(minutes=1)
-async def monthly_report_task():
-    now = datetime.now()
-    tomorrow = now + timedelta(days=1)
-
-    # 判斷是否月末
-    if tomorrow.month != now.month and now.hour == 23 and now.minute == 59:
-        data = load_json("user_message_month.json")
-        if not data:
-            return
-
-        # 排名前15
-        ranking = sorted(data.items(), key=lambda x: x[1], reverse=True)[:15]
-
-        # 公告頻道
-        channel = bot.get_channel(YOUR_CHANNEL_ID)
-
-        msg = "📙 **本月千惠觀察報告（Top 15）**\n\n"
-        for i, (uid, count) in enumerate(ranking, start=1):
-            msg += f"**{i}.** <@{uid}> — **{count} 則**\n"
-
-        msg += "\n（下個月也…一起加油吧。）"
-
-        await channel.send(msg)
-
-        # 重置
-        save_json("user_message_month.json", {})
-        print("每月統計已重置。")
-
-
-
+    
     responded = False  # 這次訊息 bot 有沒有已經回覆過
 
     # ✅ 在「每日頻道 + 聊天頻道」啟用這些互動功能
@@ -1135,7 +1062,83 @@ async def monthly_report_task():
         if not responded:
             reacted = await handle_reaction_reply(message, now_ts)
             if reacted:
-                responded = True
+                responded = True    
+
+    save_memory()
+
+    await bot.process_commands(message)
+
+
+@tasks.loop(minutes=1)
+async def daily_reset_task():
+    now = datetime.now()
+    if now.hour == 0 and now.minute == 0:
+        save_json("user_message_today.json", {})
+        print("每日統計已重置。")
+
+
+
+@tasks.loop(minutes=1)
+async def weekly_report_task():
+    now = datetime.now()
+
+    # 週日 23:59 發佈排行
+    if now.weekday() == 6 and now.hour == 23 and now.minute == 59:
+        data = load_json("user_message_week.json")
+        if not data:
+            return
+
+        # 排名
+        ranking = sorted(data.items(), key=lambda x: x[1], reverse=True)[:10]
+
+        # 公告頻道
+        channel = bot.get_channel(YOUR_CHANNEL_ID)
+
+        msg = "📘 **本週千惠觀察日誌（Top 10）**\n\n"
+        for i, (uid, count) in enumerate(ranking, start=1):
+            msg += f"**{i}.** <@{uid}> — **{count} 則**\n"
+
+        msg += "\n（我都看在眼裡啦，大家記得喝水。）"
+
+        await channel.send(msg)
+
+        # 重置
+        save_json("user_message_week.json", {})
+        print("每週統計已重置。")
+
+
+@tasks.loop(minutes=1)
+async def monthly_report_task():
+    now = datetime.now()
+    tomorrow = now + timedelta(days=1)
+
+    # 判斷是否月末（23:59）
+    if tomorrow.month != now.month and now.hour == 23 and now.minute == 59:
+        data = load_json("user_message_month.json")
+        if not data:
+            return
+
+        # 排名前15
+        ranking = sorted(data.items(), key=lambda x: x[1], reverse=True)[:15]
+
+        # 公告頻道
+        channel = bot.get_channel(YOUR_CHANNEL_ID)
+
+        msg = "📙 **本月千惠觀察報告（Top 15）**\n\n"
+        for i, (uid, count) in enumerate(ranking, start=1):
+            msg += f"**{i}.** <@{uid}> — **{count} 則**\n"
+
+        msg += "\n（下個月也…一起加油吧。）"
+
+        await channel.send(msg)
+
+        # 重置
+        save_json("user_message_month.json", {})
+        print("每月統計已重置。")
+
+
+
+
 
 
 

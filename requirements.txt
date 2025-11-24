@@ -1,4 +1,6 @@
 nextcord
 python-dotenv
+matplotlib
+
 
 
