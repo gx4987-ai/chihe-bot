@@ -1,8 +1,9 @@
-nextcord
 python-dotenv
 matplotlib
 Pillow
-nextcord>=2.6.0
+nextcord=2.6.0
+aiohttp
+pip>=24.0
 
 
 
