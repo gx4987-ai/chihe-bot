@@ -922,7 +922,7 @@ async def top(ctx: commands.Context):
     top10 = ranking[:10]
     top25 = ranking[:25]
 
-    user_idsordered = [int(uid) for uid,  in ranking]
+    user_idsordered = [int(uid) for uid, _ in ranking]
     author_id = ctx.author.id
 
     if author_id in user_ids_ordered:
