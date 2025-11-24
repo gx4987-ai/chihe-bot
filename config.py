@@ -12,4 +12,5 @@ DAILY_MESSAGE_CHANNEL_ID = 901501574105399396
 TAIWAN_TZ = ZoneInfo("Asia/Taipei")
 
 # 訊息檔案路徑
-MESSAGE_JSON_PATH = "messages/messages.json"
+MESSAGE_JSON_PATH = "messages.json"
+
