@@ -102,6 +102,17 @@ intents = nextcord.Intents.default()
 intents.message_content = True  # 記得在 Developer Portal 開啟 MESSAGE CONTENT INTENT
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+@bot.event
+async def on_ready():
+    print(f"🤖 Bot 已啟動：{bot.user} (ID: {bot.user.id})")
+
+    try:
+        synced = await bot.sync_application_commands()
+        print(f"🔧 已成功同步 {len(synced)} 個 Slash 指令")
+    except Exception as e:
+        print("❌ 同步指令時發生錯誤：", e)
+
+
 # ====== 台北時區（一定要最前面） ======
 TAIPEI_TZ = timezone(timedelta(hours=8))
 
