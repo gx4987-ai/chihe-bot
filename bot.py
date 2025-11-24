@@ -2468,8 +2468,7 @@ class RulesButtonView(nextcord.ui.View):
 # ===== UI (Rewrite C2 Style) =====
 # C2 賭桌風格完整重寫
 
-def apply_win_lose(data, winner_uid=None, loser_uid=None):
-"""為勝者 +1 win，敗者 +1 lose"""
+def apply_win_lose(data, winner_uid=None, loser_uid=None):"""為勝者 +1 win，敗者 +1 lose"""
     if winner_uid and winner_uid in data["players"]:
         data["players"][winner_uid]["win"] = data["players"][winner_uid].get("win", 0) + 1
     if loser_uid and loser_uid in data["players"]:
@@ -2478,8 +2477,7 @@ def apply_win_lose(data, winner_uid=None, loser_uid=None):
 
 
 
-def force_end_if_last_player(data):
-"""如果只剩一名點數>0玩家，強制結束賭局並重置點數（保留勝敗）"""
+def force_end_if_last_player(data):"""如果只剩一名點數>0玩家，強制結束賭局並重置點數（保留勝敗）"""
     alive = []
     for uid, p in data["players"].items():
         if p.get("points", 0) > 0 and not p.get("bankrupt"):
