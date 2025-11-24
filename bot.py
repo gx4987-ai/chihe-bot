@@ -8,10 +8,6 @@ import aiohttp
 from PIL import Image, ImageDraw
 import io                       # 給 build_top10_image 用
 
-import nextcord
-from nextcord.ext import commands, tasks
-from nextcord import Interaction, SlashOption
-from nextcord.ui import View, button
 
 
 
@@ -19,6 +15,11 @@ from nextcord.ui import View, button
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Tuple, Optional
 
+import nextcord
+from nextcord.ext import commands, tasks
+
+from nextcord.ui import View, button
+from nextcord import SlashOption
 
 # 訊息檔案路徑
 import json
@@ -61,85 +62,18 @@ def load_messages():
         return []
     except Exception as e:
         print(f"Unexpected error: {e}")
-        return []
 
-
-import os
-print(f"Current working directory: {os.getcwd()}")
-print(f"Checking if messages.json exists: {os.path.exists(MESSAGE_FILE)}")
-print(f"Absolute path to messages.json: {os.path.abspath(MESSAGE_FILE)}")
-import os
-import os
-print("Current working directory:", os.getcwd())
-print("Checking if messages.json exists:", os.path.exists('./messages.json'))
-
-# Print the current working directory to make sure the path is correct
-print(f"Current working directory: {os.getcwd()}")
-
-# Print the content of the current directory to check if messages.json exists
-print(f"Listing files in current directory: {os.listdir('.')}")
-
-
-
-try:
-    with open(MESSAGE_FILE, "r", encoding="utf-8") as f:
-        messages = json.load(f)
-except json.JSONDecodeError as e:
-    print(f"Error decoding JSON: {e}")
-except Exception as e:
-    print(f"Unexpected error: {e}")
-
-from nextcord.ui import View, Button
-import nextcord
-
-class TodView(View):
-    def __init__(self):
-        super().__init__()
-        self.add_item(Button(label="Test", style=nextcord.ButtonStyle.green))
-
-
-
-from message_loader import load_messages as load_messages_from_module
-
-
-
-# 先載入訊息
+# === 初始化訊息與 Bot 設定（整理後） ===
 messages = load_messages()
 
-
 intents = nextcord.Intents.default()
-intents.message_content = True  # 記得在 Dev Portal 也要開
-
-# ✅ 回到 commands.Bot，這樣 sync_application_commands() 才會回傳 list
-intents = nextcord.Intents.default()
-intents.message_content = True
-
-from nextcord.ext import commands
-import nextcord
-
-intents = nextcord.Intents.default()
-intents.message_content = True
+intents.message_content = True  # 記得在 Dev Portal 也要開啟 Message Content Intent
 
 bot = commands.Bot(
     command_prefix="!",
     intents=intents
 )
 
-@bot.event
-async def on_ready():
-    print(f"⚡ Bot 已啟動：{bot.user} (ID: {bot.user.id})")
-
-    try:
-        synced = await bot.sync_application_commands()
-        print(f"✅ 已成功同步 {len(synced)} 個 Slash 指令")
-    except Exception as e:
-        print("❌ 同步指令時發生錯誤:", e)
-
-
-    # ---- 啟動排程 ----
-    if not send_daily_message.is_running():
-        send_daily_message.start()
-        daily_reset_task.start()
         weekly_report_task.start()
         monthly_report_task.start()
 
@@ -149,7 +83,10 @@ async def on_ready():
 # 🎲 賭博系統（簡潔 Style C Embed＋規則＆操作按鈕）
 # 以下為示範結構（請按照你 bot 原本的架構貼入）
 
-
+import nextcord
+from nextcord.ext import commands
+from nextcord import Interaction, SlashOption
+import json, os, random
 
 # ＝＝＝資料處理＝＝＝
 GAMBLE_FILE = "gamble_data.json"
@@ -1875,8 +1812,6 @@ async def expedition_rank(ctx: commands.Context):
     await ctx.send(embed=embed)
 
 
-from nextcord.ui import View, button
-
 class TodView(View):
     """真心話大冒險控制台用的按鈕 View"""
 
@@ -1902,10 +1837,9 @@ class TodView(View):
 
         if interaction.user.id in players:
             players.remove(interaction.user.id)
-            await interaction.response.send_message("你已經退出這輪遊戲( ", ephemeral=True)
+            await interaction.response.send_message("好，我先把你從這輪名單裡拿掉( ", ephemeral=True)
         else:
-            await interaction.response.send_message("你原本就不在這輪遊戲裡( ", ephemeral=True)
-
+            await interaction.response.send_message("你本來就不在這輪名單裡( ", ephemeral=True)
 
     @button(label="查看玩家", style=nextcord.ButtonStyle.gray)
     async def list_button(self, _: nextcord.ui.Button, interaction: nextcord.Interaction):
@@ -3020,4 +2954,3 @@ async def myhelp(ctx):
     """
 
     await ctx.send(help_text)
-
