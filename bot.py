@@ -106,22 +106,27 @@ intents.message_content = True  # 記得在 Dev Portal 也要開
 intents = nextcord.Intents.default()
 intents.message_content = True
 
-bot = nextcord.Bot(
+from nextcord.ext import commands
+import nextcord
+
+intents = nextcord.Intents.default()
+intents.message_content = True
+
+bot = commands.Bot(
     command_prefix="!",
     intents=intents
 )
 
-
 @bot.event
 async def on_ready():
-    print(f"🤖 Bot 已啟動：{bot.user} (ID: {bot.user.id})")
+    print(f"⚡ Bot 已啟動：{bot.user} (ID: {bot.user.id})")
 
-    # ---- 同步 Slash 指令 ----
     try:
         synced = await bot.sync_application_commands()
-        print(f"🔧 已成功同步 {len(synced)} 個 Slash 指令")
+        print(f"✅ 已成功同步 {len(synced)} 個 Slash 指令")
     except Exception as e:
-        print("❌ 同步指令時發生錯誤：", e)
+        print("❌ 同步指令時發生錯誤:", e)
+
 
     # ---- 啟動排程 ----
     if not send_daily_message.is_running():
