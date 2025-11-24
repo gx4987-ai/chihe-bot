@@ -2278,14 +2278,7 @@ class TOD(commands.Cog):
 # 故事接龍 Story 系統（整理修復後完整版）
 # ============================================================
 
-@bot.event
-async def on_ready():
-    print("Bot is ready.")
-    try:
-        synced = await bot.sync_application_commands()
-        print(f"已同步 {len(synced)} 個 Slash 指令")
-    except Exception as e:
-        print(e)
+
 
 
 class StoryCog(commands.Cog):
@@ -2514,29 +2507,49 @@ async def gamble_main(inter: Interaction):
 
 
 # ===== /開始賭博 =====
-@bot.slash_command(name="賭博骰子", description="開始本局賭局（由莊家或GM使用）")
-async def start_gamble(inter: Interaction):
+# ===== /賭博（主介面） =====
+@bot.slash_command(name="賭博", description="開啟賭場主介面")
+async def gamble_main(inter: Interaction):
+
     data = load_gamble()
 
-    # 已有玩家？
-    if not data["order"]:
-        await inter.response.send_message("目前沒有玩家加入賭局，請先用 /加入賭局。", ephemeral=True)
-        return
+    embed = nextcord.Embed(
+        title="🎲 賭場系統",
+        description=(
+            "歡迎來到 **千惠的賭博骰子**！\n\n"
+            "使用下方按鈕操作：\n"
+            "・加入賭局\n"
+            "・下注\n"
+            "・開始擲骰（莊家專用）\n"
+            "・查看規則與操作方式\n"
+        ),
+        color=0x2f3136
+    )
 
-    # 設定第一位莊家
-    data["banker_index"] = 0
-    data["bets"] = {}
-    data["ready"] = False
-    save_gamble(data)
+    await inter.response.send_message(embed=embed, view=GambleMainView(), ephemeral=False)
 
-    banker_uid = data["order"][0]
-    banker_name = data["players"][banker_uid]["name"]
 
-    embed = nextcord.Embed(title="🎮 賭局開始！", color=0x2f3136)
-    embed.add_field(name="本局莊家", value=banker_name, inline=False)
-    embed.add_field(name="下一步", value="所有閒家請使用 **/下注 金額** 進行下注。", inline=False)
+# ===== 賭博主介面按鈕 =====
+class GambleMainView(nextcord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-    await inter.response.send_message(embed=embed, view=RulesButtonView())
+    @nextcord.ui.button(label="➕ 加入賭局", style=nextcord.ButtonStyle.green)
+    async def join_btn(self, btn, inter):
+        await join_gamble.callback(inter)
+
+    @nextcord.ui.button(label="💰 下注", style=nextcord.ButtonStyle.blurple)
+    async def bet_btn(self, btn, inter):
+        await inter.response.send_message("請使用指令：`/下注 金額`", ephemeral=True)
+
+    @nextcord.ui.button(label="🎲 開始擲骰（莊家）", style=nextcord.ButtonStyle.red)
+    async def start_btn(self, btn, inter):
+        await StartDiceButton.start(self=StartDiceButton(), btn=btn, inter=inter)
+
+    @nextcord.ui.button(label="📘 規則 / 操作", style=nextcord.ButtonStyle.gray)
+    async def rules_btn(self, btn, inter):
+        await inter.response.send_message("請查看下方按鈕", view=RulesButtonView(), ephemeral=True)
+
 
 # ===== UI (Rewrite C2 Style) =====
 # C2 賭桌風格完整重寫
@@ -2914,7 +2927,14 @@ async def reset_gamble(inter: Interaction):
 
     await inter.response.send_message(embed=embed)
 
-
+@bot.event
+async def on_ready():
+    print("Bot is ready.")
+    try:
+        synced = await bot.sync_application_commands()
+        print(f"已同步 {len(synced)} 個 Slash 指令")
+    except Exception as e:
+        print(e)
 
 # ============================================================
 # 導出函式給主程式使用
