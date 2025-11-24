@@ -6,6 +6,9 @@ import random
 import time
 import aiohttp
 from PIL import Image, ImageDraw
+import io                       # 給 build_top10_image 用
+
+
 
 
 
@@ -13,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, Tuple, Optional
 
 import nextcord
+from nextcord.ext import commands, tasks
 
 from nextcord.ui import View, button
 from nextcord import SlashOption
@@ -20,19 +24,6 @@ from nextcord import SlashOption
 # 訊息檔案路徑
 import json
 import os
-
-
-import nextcord
-from nextcord.ext import commands, application_commands
-
-intents = nextcord.Intents.default()
-intents.message_content = True
-
-# 用 application_commands.Bot 取代 commands.Bot
-bot = application_commands.Bot(
-    command_prefix="!",
-    intents=intents
-)
 
 
 # ---- 近 90 天留言統計（畫圖用） ----
@@ -108,11 +99,16 @@ from message_loader import load_messages
 # 先載入訊息
 messages = load_messages()
 
+from nextcord.ext import commands, tasks   # ✅ 用 commands + tasks，就好
 
-# ---- Intents / Bot ----
 intents = nextcord.Intents.default()
-intents.message_content = True  # 記得在 Developer Portal 開啟 MESSAGE CONTENT INTENT
+intents.message_content = True  # 記得在 Dev Portal 也要開
 
+# ✅ 回到 commands.Bot，這樣 sync_application_commands() 才會回傳 list
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents
+)
 
 @bot.event
 async def on_ready():
@@ -319,7 +315,7 @@ async def force_end_if_last_player(ctx, data):
             if "bankrupt" in p:
                 del p["bankrupt"]
 
-        save_game(data)
+        save_gamele(data)
         return True  # 代表強制結束已發生
 
     return False  # 沒有強制結束
@@ -477,6 +473,7 @@ async def bet(inter: Interaction, amount: int = SlashOption(description="下注�
         await inter.response.send_message("你還沒加入賭局，用 /加入賭局。", ephemeral=True)
         return
 
+    player = data["players"][uid]  # ✅ 補這行
     if player.get("bankrupt") or player.get("points", 0) <= 0:
         await inter.response.send_message("你已破產，無法再下注，只能旁觀了。", ephemeral=True)
         return
