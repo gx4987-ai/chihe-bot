@@ -2560,10 +2560,7 @@ class StartDiceButton(nextcord.ui.View):
 )
 
 
-        result_text = "
-――――――――――――――――――――――――
-【閒家結果】
-"
+        result_text = "――――――――――――――――――――――――【閒家結果】"
 
         # --- 莊家 123：無條件輸兩倍 ---
         if info["type"] == "123":
