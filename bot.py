@@ -2278,6 +2278,16 @@ class TOD(commands.Cog):
 # 故事接龍 Story 系統（整理修復後完整版）
 # ============================================================
 
+@bot.event
+async def on_ready():
+    print("Bot is ready.")
+    try:
+        synced = await bot.sync_application_commands()
+        print(f"已同步 {len(synced)} 個 Slash 指令")
+    except Exception as e:
+        print(e)
+
+
 class StoryCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
