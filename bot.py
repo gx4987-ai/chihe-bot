@@ -963,7 +963,7 @@ async def top(ctx: commands.Context):
     for idx, (user_id, count) in enumerate(top10, start=1):
         member = ctx.guild.get_member(int(user_id))
         if member:
-            name_display = member.mention
+            name_display = member.display_name
         else:
             try:
                 user = await bot.fetch_user(int(user_id))
