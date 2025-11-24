@@ -918,6 +918,10 @@ async def top(ctx: commands.Context):
 
     ranking = sorted(data.items(), key=lambda x: x[1], reverse=True)
 
+    
+    user_ids_ordered = [int(uid) for uid, _ in ranking]
+
+
     # Top 10 & Top 25
     top10 = ranking[:10]
     top25 = ranking[:25]
