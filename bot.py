@@ -13,7 +13,6 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, Tuple, Optional
 
 import nextcord
-from nextcord.ext import commands, tasks
 
 from nextcord.ui import View, button
 from nextcord import SlashOption
@@ -21,6 +20,19 @@ from nextcord import SlashOption
 # 訊息檔案路徑
 import json
 import os
+
+
+import nextcord
+from nextcord.ext import commands, application_commands
+
+intents = nextcord.Intents.default()
+intents.message_content = True
+
+# 用 application_commands.Bot 取代 commands.Bot
+bot = application_commands.Bot(
+    command_prefix="!",
+    intents=intents
+)
 
 
 # ---- 近 90 天留言統計（畫圖用） ----
@@ -100,7 +112,7 @@ messages = load_messages()
 # ---- Intents / Bot ----
 intents = nextcord.Intents.default()
 intents.message_content = True  # 記得在 Developer Portal 開啟 MESSAGE CONTENT INTENT
-bot = commands.Bot(command_prefix="!", intents=intents)
+
 
 @bot.event
 async def on_ready():
