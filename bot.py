@@ -211,7 +211,10 @@ class RulesButtonView(nextcord.ui.View):
 
 
 # ===== /賭博（主介面） =====
-@bot.slash_command(name="賭博", description="開啟賭博主選單（規則 + 操作方式）")
+@bot.slash_command(
+    name="賭博", 
+    description="開啟賭博主選單（規則 + 操作方式）"
+    )
 async def gamble_main(inter: Interaction):
 
     embed = nextcord.Embed(
@@ -340,7 +343,10 @@ async def force_end_if_last_player(ctx, data):
 
 
 # ===== /戰績 =====
-@bot.slash_command(name="戰績", description="查看自己的賭場勝敗紀錄")
+@bot.slash_command(
+    name="戰績", 
+    description="查看自己的賭場勝敗紀錄"
+    )
 async def gamble_stats(inter: Interaction):
     uid = str(inter.user.id)
     data = load_gamble()
@@ -364,7 +370,10 @@ async def gamble_stats(inter: Interaction):
     await inter.response.send_message(embed=embed, ephemeral=True)
 
 # ===== /戰績排行 =====
-@bot.slash_command(name="戰績排行", description="賭場勝率排行榜（前 10 名）")
+@bot.slash_command(
+    name="戰績排行", 
+    description="賭場勝率排行榜（前 10 名）"
+    )
 async def stats_rank(inter: Interaction):
     data = load_gamble()
 
@@ -399,7 +408,10 @@ async def stats_rank(inter: Interaction):
     await inter.response.send_message(embed=embed)
 
 # ===== /賭博（開局） =====
-@bot.slash_command(name="賭博", description="建立或查看目前的賭局狀態")
+@bot.slash_command(
+    name="賭博", 
+    description="建立或查看目前的賭局狀態"
+    )
 async def open_gamble(inter: nextcord.Interaction):
     data = load_gamble()
 
@@ -445,7 +457,10 @@ async def open_gamble(inter: nextcord.Interaction):
 
 # ===== UI (Rewrite C2 Style) =====
 # ===== /加入賭局 =====
-@bot.slash_command(name="加入賭局", description="加入賭博遊戲")
+@bot.slash_command(
+    name="加入賭局", 
+    description="加入賭博遊戲"
+    )
 async def join_gamble(inter: Interaction):
     uid = str(inter.user.id)
     data = load_gamble()
@@ -466,7 +481,10 @@ async def join_gamble(inter: Interaction):
     await inter.response.send_message(embed=embed, ephemeral=True)
 
 # ===== /下注（金額） =====
-@bot.slash_command(name="下注", description="下注金額")
+@bot.slash_command(
+    name="下注", 
+    description="下注金額"
+    )
 async def bet(inter: Interaction, amount: int = SlashOption(description="下注金額")):
     uid = str(inter.user.id)
     data = load_gamble()
@@ -667,7 +685,10 @@ class StartDiceButton(nextcord.ui.View):
                     field.value = field.value + extra
                     break
 
-@bot.slash_command(name="結束賭局", description="重置賭局（保留戰績與玩家列表）")
+@bot.slash_command(
+    name="結束賭局", 
+    description="重置賭局（保留戰績與玩家列表）"
+    )
 async def reset_gamble(inter: Interaction):
     data = load_gamble()
 
