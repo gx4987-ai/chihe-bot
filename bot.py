@@ -481,7 +481,7 @@ def get_mission_for_today() -> str:
     return DAILY_MISSIONS[idx]
 
 
-@bot.command(name="mission", aliases=["今日任務", "任務"])
+@bot.command(name="任務", aliases=["今日任務", "任務"])
 async def mission_cmd(ctx: commands.Context):
     m = get_mission_for_today()
     await ctx.send(f"{ctx.author.mention} 今天的任務是：{m}")
@@ -784,9 +784,14 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    content = message.content  # ⚠️ 必須要宣告
+    # 🕒 每次訊息的時間戳（冷卻系統大量使用）
+    now_ts = int(time.time())
+    now = datetime.now(TAIPEI_TZ)
 
-       # === 檔案 ===
+    # ✉️ 訊息內容
+    content = message.content
+
+    # === 檔案 ===
     today_file = "user_message_today.json"
     week_file = "user_message_week.json"
     month_file = "user_message_month.json"
@@ -810,50 +815,48 @@ async def on_message(message):
     month[user_id] = month.get(user_id, 0) + 1
     save_json(month_file, month)
 
-    await bot.process_commands(message)   
-    # 記錄訊息統計
+    # 統計訊息
     update_message_stats(message)
 
-    # -- 記錄今日 tag 次數 --
+    # -- 今日 tag 次數 --
     if message.mentions:
         tags = MEMORY.setdefault("today_tags", {})
         for user in message.mentions:
             uid = str(user.id)
             tags[uid] = tags.get(uid, 0) + 1
 
-    # -- 記錄有人叫千惠（提到 bot 名稱） --
-    if "千惠" in message.content:
+    # -- 記錄叫「千惠」 --
+    if "千惠" in content:
         calls = MEMORY.setdefault("today_chihui", {})
         uid = str(message.author.id)
         calls[uid] = calls.get(uid, 0) + 1
 
-    
-    responded = False  # 這次訊息 bot 有沒有已經回覆過
+    responded = False  # 這次訊息有沒有已經回覆過
 
-    # ✅ 在「每日頻道 + 聊天頻道」啟用這些互動功能
+    # === 互動功能：僅限聊天頻道 + 每日頻道 ===
     if message.channel.id in (CHAT_CHANNEL_ID, DAILY_CHANNEL_ID):
 
-        # 1) 先處理早安/午安/晚安（2 小時安靜冷卻，不會出現冷卻提示）
+        # 1) 早安/午安/晚安
         if await handle_greeting_if_any(message):
             responded = True
 
-        # 2) 其他情緒關鍵字（好累、抱抱、草…），沿用你原本的冷卻 + 反洗版邏輯
+        # 2) 關鍵字情緒回覆
         if not responded:
             for keyword, reply_text in EMOTION_KEYWORD_REPLIES.items():
                 if is_keyword_triggered(keyword, content):
                     user_key = (keyword, message.author.id)
 
-                    # 🌙 深夜模式：先根據關鍵字換成深夜版語氣
+                    # 🌙 深夜模式
                     if is_night_mode():
                         if keyword in ["好累", "好煩", "壓力好大", "不想動", "不想念書"]:
                             reply_text = random.choice(NIGHT_MODE_REPLIES["tired"])
 
-                    # 1️⃣ 看這個人有沒有被封印
+                    # 1️⃣ 被封印？
                     mute_until = MUTE_UNTIL.get(user_key, 0)
                     if now_ts < mute_until:
                         break
 
-                    # 2️⃣ 檢查這個關鍵字的全局冷卻
+                    # 2️⃣ 全局冷卻
                     last_time = LAST_REPLY_TIME.get(keyword, 0)
                     elapsed = now_ts - last_time
 
@@ -868,7 +871,7 @@ async def on_message(message):
                             if count < ABUSE_MAX_HINTS:
                                 remain = int(KEYWORD_COOLDOWN - elapsed)
                                 await message.channel.send(
-                                    f"{message.author.mention} 這個關鍵字還在冷卻中，大概 {remain} 秒之後再試比較好( "
+                                    f"{message.author.mention} 這個關鍵字還在冷卻中，大概 {remain} 秒後再試比較好( "
                                 )
                             else:
                                 MUTE_UNTIL[user_key] = now_ts + ABUSE_MUTE_SECONDS
@@ -877,23 +880,23 @@ async def on_message(message):
                                 )
                         break
 
-                    # 3️⃣ 不在冷卻 → 正常回覆
+                    # 3️⃣ 正常回覆
                     await message.channel.send(f"{message.author.mention} {reply_text}")
                     LAST_REPLY_TIME[keyword] = now_ts
                     ABUSE_HINT_COUNT[user_key] = 0
                     responded = True
                     break
 
-        # 3) 進階情緒偵測：只有在「還沒因為關鍵字回覆」時才啟動
+        # 3) 情緒 AI 偵測
         if (not responded) and detect_negative_emotion(content):
             last_emote = LAST_EMOTION_REPLY_TIME.get(message.author.id, 0)
             if now_ts - last_emote >= EMOTION_COOLDOWN_PER_USER:
+
                 if is_night_mode():
                     reply = random.choice(NIGHT_MODE_REPLIES["comfort"])
                 else:
                     reply = random.choice(EMOTION_RESPONSES)
 
-                # 如果這個人有自己記錄過小語錄，就順便提一下
                 notes = get_user_notes(message.author.id)
                 extra = ""
                 if notes:
@@ -904,15 +907,16 @@ async def on_message(message):
                 LAST_EMOTION_REPLY_TIME[message.author.id] = now_ts
                 responded = True
 
-        # 4) 可愛反應包（如果前面都沒回覆，就試試看）
+        # 4) 可愛反應包
         if not responded:
             reacted = await handle_reaction_reply(message, now_ts)
             if reacted:
-                responded = True    
+                responded = True
 
     save_memory()
 
     await bot.process_commands(message)
+
 
 
 @tasks.loop(minutes=1)
