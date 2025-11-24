@@ -557,8 +557,6 @@ async def mission_cmd(ctx: commands.Context):
     await ctx.send(f"{ctx.author.mention} 今天的任務是：{m}")
 
 
-# ---------- 6. 記錄小語錄的指令 ----------
-
 
 
 
@@ -1069,21 +1067,6 @@ async def monthly_report_task():
         print("每月統計已重置。")
 
 
-
-@bot.command(name="語錄", aliases=["小語錄"])
-async def show_notes_cmd(ctx: commands.Context):
-    """顯示你自己記錄過的幾句話。"""
-    notes = get_user_notes(ctx.author.id)
-    if not notes:
-        await ctx.send(f"{ctx.author.mention} 你目前還沒有跟我說要記住什麼東西( ")
-        return
-
-    # 只顯示最後 5 則
-    last_notes = notes[-5:]
-    lines = [f"{i}. {t}" for i, t in enumerate(last_notes, start=1)]
-    await ctx.send(
-        f"{ctx.author.mention} 這是我記得、跟你有關的幾句話：\n" + "\n".join(lines)
-    )
 
 
 # 啟動時就先把記憶載進來
