@@ -2468,52 +2468,52 @@ class RulesButtonView(nextcord.ui.View):
 # ===== UI (Rewrite C2 Style) =====
 # C2 賭桌風格完整重寫
 
-def apply_win_lose(data, winner_uid=None, loser_uid=None):"""為勝者 +1 win，敗者 +1 lose"""
+# ===== 勝敗結算 + 最後一人強制結束 =====
+
+def apply_win_lose(data, winner_uid=None, loser_uid=None):
+    """為勝者 +1 win，敗者 +1 lose"""
     if winner_uid and winner_uid in data["players"]:
         data["players"][winner_uid]["win"] = data["players"][winner_uid].get("win", 0) + 1
+
     if loser_uid and loser_uid in data["players"]:
         data["players"][loser_uid]["lose"] = data["players"][loser_uid].get("lose", 0) + 1
 
 
-
-
-def force_end_if_last_player(data):"""如果只剩一名點數>0玩家，強制結束賭局並重置點數（保留勝敗）"""
+def force_end_if_last_player(data):
+    """如果只剩一名點數>0玩家，強制結束賭局並重置點數（保留勝敗）"""
     alive = []
     for uid, p in data["players"].items():
         if p.get("points", 0) > 0 and not p.get("bankrupt"):
             alive.append(uid)
 
-
-# 只剩一人 → 強制結束
+    # 只剩一人 → 強制結束
     if len(alive) == 1:
         winner_uid = alive[0]
         winner_name = data["players"][winner_uid]["name"]
 
-
-# 重置點數（勝敗保留）
+        # 重置點數（勝敗保留）
         for uid, p in data["players"].items():
             p["points"] = 5000
             if "bankrupt" in p:
-            del p["bankrupt"]
+                del p["bankrupt"]
 
-
-# 清除對局狀態
+        # 清除當前對局
         data["bets"] = {}
         data["ready"] = False
         data["banker_index"] = 0
 
-
         save_gamble(data)
 
-
-# 使用 embed 公告強制結束
-        embed = nextcord.Embed(title="🏆 賭局結束", color=0xffd700)
-        embed.description = f"最終贏家為 **{winner_name}**！賭局已自動重置，可重新開始。"
-        save_gamble(data)
-        return embed"🏆 遊戲結束！最終贏家為 **{winner_name}**，賭局已重置。"
-
+        # Embed 公告
+        embed = nextcord.Embed(title="🏆 賭局強制結束", color=0xffd700)
+        embed.description = (
+            f"最終倖存玩家為 **{winner_name}**！\n"
+            "賭局已自動重置，可重新開始。"
+        )
+        return embed
 
     return None
+
 
 
 def force_end_if_last_player(data):
