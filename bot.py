@@ -367,164 +367,7 @@ def update_message_stats(message: nextcord.Message) -> None:
 
 
 
-@bot.command(name="今日小報告", aliases=["今日報告", "伺服器小報告"])
-async def today_report(ctx: commands.Context):
-    """千惠的當日伺服器小報告。"""
 
-    # 如果沒有任何紀錄
-    if not USER_MESSAGE_COUNT:
-        await ctx.send("欸…我今天好像還沒看到什麼東西，再陪我說說話啦( ")
-        return
-
-    # 今日總訊息量
-    total_messages = sum(USER_MESSAGE_COUNT.values())
-
-    # Top talkers（前 10 名）
-    top_talkers = sorted(USER_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True)[:10]
-
-    # Top 深夜講話（前 5 名）
-    top_night = sorted(USER_NIGHT_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True)[:5]
-
-    # 最吵的頻道（前 5 名）
-    top_channels = sorted(CHANNEL_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True)[:5]
-
-    # 今天最常 tag 別人的人
-    tag_count: Dict[int, int] = {}
-    for uid, data in MEMORY.get("today_tags", {}).items():
-        tag_count[int(uid)] = data
-
-    top_taggers = sorted(tag_count.items(), key=lambda x: x[1], reverse=True)[:5]
-
-    # 今天最常找千惠的人
-    today_chihui_calls = MEMORY.get("today_chihui", {})  # {uid: 次數}
-    top_chihui_callers = sorted(today_chihui_calls.items(), key=lambda x: x[1], reverse=True)[:3]
-
-    # 千惠式旁白（隨機）
-    comments = [
-        "我都在旁邊偷偷看著啦，你們真的很吵，但…有點可愛( ",
-        "今天伺服器的氣氛還不錯，我喜歡這樣的感覺( ",
-        "你們今天是不是又偷熬夜，去睡覺啦笨蛋( ",
-        "我覺得你們講話講的比我在軍中跑步還累欸( ",
-    ]
-
-    import random
-    comment = random.choice(comments)
-
-    embed = nextcord.Embed(
-        title="📊 《千惠的當日伺服器小報告》",
-        description=comment,
-        color=0xFFC03A,
-    )
-
-    # 總量
-    embed.add_field(
-        name="📝 今日總訊息量",
-        value=f"{total_messages} 則",
-        inline=False,
-    )
-
-    # Top talkers
-    talker_lines = []
-    for uid, count in top_talkers:
-        talker_lines.append(f"<@{uid}>：{count} 則")
-    embed.add_field(
-        name="💬 今天講最多話的人（前十名）",
-        value="\n".join(talker_lines) if talker_lines else "無資料",
-        inline=False,
-    )
-
-    # 深夜不睡覺
-    night_lines = []
-    for uid, count in top_night:
-        night_lines.append(f"<@{uid}>：{count} 則")
-    embed.add_field(
-        name="🌙 深夜不睡覺榜（前 5 名）",
-        value="\n".join(night_lines) if night_lines else "大家都有乖乖睡( ",
-        inline=False,
-    )
-
-    # 頻道
-    channel_lines = []
-    for chid, count in top_channels:
-        channel_lines.append(f"<#{chid}>：{count} 則")
-    embed.add_field(
-        name="📢 今天最吵的頻道（前 5 名）",
-        value="\n".join(channel_lines) if channel_lines else "今天伺服器特別安靜欸( ",
-        inline=False,
-    )
-
-    # 最常 tag 人
-    tag_lines = []
-    for uid, count in top_taggers:
-        tag_lines.append(f"<@{uid}>：{count} 次")
-    embed.add_field(
-        name="📎 今天最常 tag 別人的人",
-        value="\n".join(tag_lines) if tag_lines else "今天大家好像都很低調欸( ",
-        inline=False,
-    )
-
-    # 最常找千惠
-    chihui_lines = []
-    for uid, count in top_chihui_callers:
-        chihui_lines.append(f"<@{uid}>：{count} 次")
-    embed.add_field(
-        name="💗 今天最常找千惠的人",
-        value="\n".join(chihui_lines) if chihui_lines else "沒人找我…好孤單||個毛||( ",
-        inline=False,
-    )
-
-    await ctx.send(embed=embed)
-
-
-
-
-import matplotlib.pyplot as plt
-import io
-
-@bot.command(name="留言走勢", aliases=["訊息走勢", "伺服器走勢"])
-async def message_trend(ctx: commands.Context):
-
-    # 若統計量太少
-    if len(DAILY_MESSAGE_COUNT) < 3:
-        await ctx.send("欸……目前資料還有點少，我再觀察一陣子再給你看好不好( ")
-        return
-
-    # 取近 90 天
-    today = datetime.now(TAIPEI_TZ).date()
-    days_ago_90 = today - timedelta(days=90)
-
-    # 過濾區間
-    filtered = {
-        day: count
-        for day, count in DAILY_MESSAGE_COUNT.items()
-        if datetime.strptime(day, "%Y-%m-%d").date() >= days_ago_90
-    }
-
-    # 排序
-    sorted_days = sorted(filtered.keys())
-    x = sorted_days
-    y = [filtered[day] for day in sorted_days]
-
-    # 畫圖
-    plt.figure(figsize=(10, 4))
-    plt.plot(x, y, linewidth=2)
-    plt.xticks(rotation=45, fontsize=8)
-    plt.title("近 90 天留言走勢圖", fontsize=14)
-    plt.tight_layout()
-
-    # 存到 BytesIO
-    img_bytes = io.BytesIO()
-    plt.savefig(img_bytes, format="png")
-    img_bytes.seek(0)
-    plt.close()
-
-    file = nextcord.File(img_bytes, filename="msg_trend.png")
-
-    # 千惠語氣
-    await ctx.send(
-        "欸我這段時間在旁邊看你們鬧得蠻開心的，給你看一下最近 90 天的留言走勢( ",
-        file=file
-    )
 
 
 
@@ -937,9 +780,12 @@ async def on_ready():
 
 
 @bot.event
-async def on_message(message: nextcord.Message):
+async def on_message(message):
     if message.author.bot:
         return
+
+    content = message.content  # ⚠️ 必須要宣告
+
        # === 檔案 ===
     today_file = "user_message_today.json"
     week_file = "user_message_week.json"
@@ -1656,7 +1502,164 @@ async def ping(ctx: commands.Context):
     """測試用指令：!ping"""
     await ctx.send(f"{ctx.author.mention} 在，在的，別懷疑( ")
 
+@bot.command(name="今日小報告", aliases=["今日報告", "伺服器小報告"])
+async def today_report(ctx: commands.Context):
+    """千惠的當日伺服器小報告。"""
 
+    # 如果沒有任何紀錄
+    if not USER_MESSAGE_COUNT:
+        await ctx.send("欸…我今天好像還沒看到什麼東西，再陪我說說話啦( ")
+        return
+
+    # 今日總訊息量
+    total_messages = sum(USER_MESSAGE_COUNT.values())
+
+    # Top talkers（前 10 名）
+    top_talkers = sorted(USER_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    # Top 深夜講話（前 5 名）
+    top_night = sorted(USER_NIGHT_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    # 最吵的頻道（前 5 名）
+    top_channels = sorted(CHANNEL_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    # 今天最常 tag 別人的人
+    tag_count: Dict[int, int] = {}
+    for uid, data in MEMORY.get("today_tags", {}).items():
+        tag_count[int(uid)] = data
+
+    top_taggers = sorted(tag_count.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    # 今天最常找千惠的人
+    today_chihui_calls = MEMORY.get("today_chihui", {})  # {uid: 次數}
+    top_chihui_callers = sorted(today_chihui_calls.items(), key=lambda x: x[1], reverse=True)[:3]
+
+    # 千惠式旁白（隨機）
+    comments = [
+        "我都在旁邊偷偷看著啦，你們真的很吵，但…有點可愛( ",
+        "今天伺服器的氣氛還不錯，我喜歡這樣的感覺( ",
+        "你們今天是不是又偷熬夜，去睡覺啦笨蛋( ",
+        "我覺得你們講話講的比我在軍中跑步還累欸( ",
+    ]
+
+    import random
+    comment = random.choice(comments)
+
+    embed = nextcord.Embed(
+        title="📊 《千惠的當日伺服器小報告》",
+        description=comment,
+        color=0xFFC03A,
+    )
+
+    # 總量
+    embed.add_field(
+        name="📝 今日總訊息量",
+        value=f"{total_messages} 則",
+        inline=False,
+    )
+
+    # Top talkers
+    talker_lines = []
+    for uid, count in top_talkers:
+        talker_lines.append(f"<@{uid}>：{count} 則")
+    embed.add_field(
+        name="💬 今天講最多話的人（前十名）",
+        value="\n".join(talker_lines) if talker_lines else "無資料",
+        inline=False,
+    )
+
+    # 深夜不睡覺
+    night_lines = []
+    for uid, count in top_night:
+        night_lines.append(f"<@{uid}>：{count} 則")
+    embed.add_field(
+        name="🌙 深夜不睡覺榜（前 5 名）",
+        value="\n".join(night_lines) if night_lines else "大家都有乖乖睡( ",
+        inline=False,
+    )
+
+    # 頻道
+    channel_lines = []
+    for chid, count in top_channels:
+        channel_lines.append(f"<#{chid}>：{count} 則")
+    embed.add_field(
+        name="📢 今天最吵的頻道（前 5 名）",
+        value="\n".join(channel_lines) if channel_lines else "今天伺服器特別安靜欸( ",
+        inline=False,
+    )
+
+    # 最常 tag 人
+    tag_lines = []
+    for uid, count in top_taggers:
+        tag_lines.append(f"<@{uid}>：{count} 次")
+    embed.add_field(
+        name="📎 今天最常 tag 別人的人",
+        value="\n".join(tag_lines) if tag_lines else "今天大家好像都很低調欸( ",
+        inline=False,
+    )
+
+    # 最常找千惠
+    chihui_lines = []
+    for uid, count in top_chihui_callers:
+        chihui_lines.append(f"<@{uid}>：{count} 次")
+    embed.add_field(
+        name="💗 今天最常找千惠的人",
+        value="\n".join(chihui_lines) if chihui_lines else "沒人找我…好孤單||個毛||( ",
+        inline=False,
+    )
+
+    await ctx.send(embed=embed)
+
+
+
+
+import matplotlib.pyplot as plt
+import io
+
+@bot.command(name="留言走勢", aliases=["訊息走勢", "伺服器走勢"])
+async def message_trend(ctx: commands.Context):
+
+    # 若統計量太少
+    if len(DAILY_MESSAGE_COUNT) < 3:
+        await ctx.send("欸……目前資料還有點少，我再觀察一陣子再給你看好不好( ")
+        return
+
+    # 取近 90 天
+    today = datetime.now(TAIPEI_TZ).date()
+    days_ago_90 = today - timedelta(days=90)
+
+    # 過濾區間
+    filtered = {
+        day: count
+        for day, count in DAILY_MESSAGE_COUNT.items()
+        if datetime.strptime(day, "%Y-%m-%d").date() >= days_ago_90
+    }
+
+    # 排序
+    sorted_days = sorted(filtered.keys())
+    x = sorted_days
+    y = [filtered[day] for day in sorted_days]
+
+    # 畫圖
+    plt.figure(figsize=(10, 4))
+    plt.plot(x, y, linewidth=2)
+    plt.xticks(rotation=45, fontsize=8)
+    plt.title("近 90 天留言走勢圖", fontsize=14)
+    plt.tight_layout()
+
+    # 存到 BytesIO
+    img_bytes = io.BytesIO()
+    plt.savefig(img_bytes, format="png")
+    img_bytes.seek(0)
+    plt.close()
+
+    file = nextcord.File(img_bytes, filename="msg_trend.png")
+
+    # 千惠語氣
+    await ctx.send(
+        "欸我這段時間在旁邊看你們鬧得蠻開心的，給你看一下最近 90 天的留言走勢( ",
+        file=file
+    )
 
 @bot.command()
 async def draw(ctx: commands.Context):
