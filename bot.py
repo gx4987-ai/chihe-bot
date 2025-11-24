@@ -107,339 +107,71 @@ async def on_ready():
 
 
 # ================================
-# 🎲 全新賭博系統：玩家 vs 千惠（無莊家閒家的版本）
-# ================================
+# ======== 三顆骰子賭局（真人莊家 vs 真人閒家）========
+# 檔案：gamble_data.json
+
 import json
 import os
 import random
+import nextcord
 from nextcord import Interaction, SlashOption
 
 GAMBLE_FILE = "gamble_data.json"
 
-# ---------- 基本資料處理 ----------
-
 def load_gamble():
-    """載入賭博資料，不存在就給預設結構。"""
     if not os.path.exists(GAMBLE_FILE):
-        return {"players": {}}
-    try:
-        with open(GAMBLE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        data = {"players": {}}
-
-    if "players" not in data or not isinstance(data["players"], dict):
-        data["players"] = {}
-    return data
-
+        return {
+            "players": {},
+            "order": [],
+            "banker_index": 0,
+            "bets": {},
+            "stage": "idle",
+            "round": {
+                "player_rolls": {},
+                "player_infos": {},
+                "banker_roll": None,
+                "banker_info": None,
+            },
+        }
+    with open(GAMBLE_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def save_gamble(data):
     with open(GAMBLE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-
-def get_player(data, user_id: int, name: str):
-    """取得玩家資料，沒有就幫他創一個。"""
-    uid = str(user_id)
-    players = data.setdefault("players", {})
-    if uid not in players:
-        players[uid] = {
-            "name": name,
-            "points": 5000,
-            "win": 0,
-            "lose": 0,
-        }
-    else:
-        # 更新一下暱稱
-        players[uid]["name"] = name
-    return players[uid]
-
-
-# ---------- 骰子＆牌型 ----------
-
+# --- 骰子表情 ---
 dice_emoji = {i: f"🎲{i}" for i in range(1, 7)}
 
 def roll3():
     return [random.randint(1, 6) for _ in range(3)]
 
+def classify(d):
+    """將骰子分類"""
+    s = sorted(d)
 
-def classify(dice):
-    """
-    傳回：{"type": "456/123/all/pair/none", "value": int}
-    value 用來比大小（平色的點數 / 全色的點數）
-    """
-    d = sorted(dice)
-    # 456 最大
-    if d == [4, 5, 6]:
-        return {"type": "456", "value": 0}
-    # 123 最小
-    if d == [1, 2, 3]:
-        return {"type": "123", "value": 0}
-    # 全色
-    if dice[0] == dice[1] == dice[2]:
-        return {"type": "all", "value": dice[0]}
-    # 平色：兩顆一樣，第三顆為點數
-    if dice[0] == dice[1]:
-        return {"type": "pair", "value": dice[2]}
-    if dice[0] == dice[2]:
-        return {"type": "pair", "value": dice[1]}
-    if dice[1] == dice[2]:
-        return {"type": "pair", "value": dice[0]}
-    # 無點
+    if s == [4, 5, 6]:
+        return {"type": "456", "value": 999}
+    if s == [1, 2, 3]:
+        return {"type": "123", "value": -1}
+
+    if d[0] == d[1] == d[2]:
+        return {"type": "all", "value": d[0]}
+
+    if d[0] == d[1]:
+        return {"type": "pair", "value": d[2]}
+    if d[0] == d[2]:
+        return {"type": "pair", "value": d[1]}
+    if d[1] == d[2]:
+        return {"type": "pair", "value": d[0]}
+
+    # 無點：給 3 次補骰機會
+    for _ in range(3):
+        nd = roll3()
+        if nd[0] == nd[1] or nd[0] == nd[2] or nd[1] == nd[2]:
+            return classify(nd)
     return {"type": "none", "value": 0}
 
-
-def hand_name(info):
-    t = info["type"]
-    v = info["value"]
-    if t == "456":
-        return "【456（最大）】"
-    if t == "123":
-        return "【123（最小）】"
-    if t == "all":
-        return f"【全色 {v}{v}{v}】"
-    if t == "pair":
-        return f"【平色，點數 {v}】"
-    return "【無點】"
-
-
-def hand_strength(info):
-    """
-    統一換成數字分數用來比較大小。
-    456 > 全色 > 平色 > 無點 > 123
-    內部再用 value 區分。
-    """
-    t = info["type"]
-    v = info["value"]
-    if t == "456":
-        return 1000
-    if t == "all":
-        return 800 + v
-    if t == "pair":
-        return 500 + v
-    if t == "none":
-        return 200
-    if t == "123":
-        return 0
-    return 0
-
-
-def win_multiplier(info):
-    """依照【贏家】的牌型決定贏的倍率。"""
-    t = info["type"]
-    v = info["value"]
-    if t == "456":
-        return 3       # 贏三倍
-    if t == "all":
-        return 5 if v == 1 else 3   # 111 五倍，其他三倍
-    if t == "pair":
-        return 2       # 平色贏兩倍
-    if t == "none":
-        return 1       # 普通贏一倍
-    if t == "123":
-        return 1       # 理論上不會拿 123 當贏家
-    return 1
-
-
-# ---------- 指令區 ----------
-
-@bot.slash_command(name="加入賭局", description="加入千惠的三顆骰子賭局（起始 5000 點）")
-async def join_gamble(inter: Interaction):
-    data = load_gamble()
-    player = get_player(data, inter.user.id, inter.user.display_name)
-    save_gamble(data)
-
-    embed = nextcord.Embed(title="✔ 成功加入賭局", color=0x2f3136)
-    embed.add_field(name="玩家", value=player["name"], inline=False)
-    embed.add_field(name="目前點數", value=str(player["points"]), inline=True)
-    await inter.response.send_message(embed=embed, ephemeral=True)
-
-
-@bot.slash_command(name="賭博", description="用三顆骰子跟千惠賭一把")
-async def gamble(
-    inter: Interaction,
-    amount: int = SlashOption(description="下注點數", min_value=1),
-):
-    data = load_gamble()
-    player = get_player(data, inter.user.id, inter.user.display_name)
-
-    if player["points"] <= 0:
-        await inter.response.send_message("你已經沒有點數了，先用 /結束賭局 重置吧( ", ephemeral=True)
-        return
-
-    if amount <= 0 or amount > player["points"]:
-        await inter.response.send_message("下注金額不合法，或超過你目前持有點數。", ephemeral=True)
-        return
-
-    # 玩家 & 千惠 擲骰
-    user_dice = roll3()
-    bot_dice = roll3()
-    user_info = classify(user_dice)
-    bot_info = classify(bot_dice)
-
-    user_score = hand_strength(user_info)
-    bot_score = hand_strength(bot_info)
-
-    embed = nextcord.Embed(title="🎲 三顆骰子賭局", color=0x2f3136)
-    embed.add_field(
-        name=f"{player['name']} 的骰子",
-        value=" ".join(dice_emoji[x] for x in user_dice) + f"\n{hand_name(user_info)}",
-        inline=False,
-    )
-    embed.add_field(
-        name="千惠 的骰子",
-        value=" ".join(dice_emoji[x] for x in bot_dice) + f"\n{hand_name(bot_info)}",
-        inline=False,
-    )
-
-    result_text = ""
-    delta = 0
-
-    if user_score == bot_score:
-        result_text = "這一把是平手，誰都沒贏誰。"
-    elif user_score > bot_score:
-        mult = win_multiplier(user_info)
-        delta = amount * mult
-        player["points"] += delta
-        player["win"] = player.get("win", 0) + 1
-        result_text = f"你贏了！這一把按照你的牌型換算，贏了 **{mult} 倍**（+{delta} 點）。"
-    else:
-        mult = win_multiplier(bot_info)
-        delta = amount * mult
-        player["points"] -= delta
-        player["lose"] = player.get("lose", 0) + 1
-        if player["points"] < 0:
-            player["points"] = 0
-        result_text = f"千惠贏了…這一把按照千惠的牌型換算，你損失 **{mult} 倍**（-{delta} 點）。"
-
-    save_gamble(data)
-
-    embed.add_field(name="本局結果", value=result_text, inline=False)
-    embed.add_field(name="你目前點數", value=str(player["points"]), inline=False)
-
-    await inter.response.send_message(embed=embed)
-
-
-@bot.slash_command(name="賭規則", description="查看三顆骰子的牌型與倍率")
-async def gamble_rules(inter: Interaction):
-    embed = nextcord.Embed(title="🎲 賭博骰子規則", color=0x2f3136)
-    embed.description = (
-        "**【456（最大）】**\n"
-        "・任何情況下都是最大牌\n"
-        "・贏的時候：贏三倍\n"
-        "\n"
-        "**【123（最小）】**\n"
-        "・任何情況下都是最小牌\n"
-        "・基本上看到就準備輸了…\n"
-        "\n"
-        "**【全色（111, 222 ~ 666）】**\n"
-        "・點數＝骰面\n"
-        "・111：贏五倍\n"
-        "・222~666：贏三倍\n"
-        "\n"
-        "**【平色】**\n"
-        "・兩顆相同，第三顆為點數\n"
-        "・彼此比較點數大小\n"
-        "・贏的時候：贏兩倍\n"
-        "\n"
-        "**【無點】**\n"
-        "・三顆都不同\n"
-        "・比【全色】、【平色】都小\n"
-        "・贏的時候：贏一倍\n"
-    )
-    await inter.response.send_message(embed=embed, ephemeral=True)
-
-
-@bot.slash_command(name="戰績", description="查看自己的賭博戰績")
-async def gamble_stats(inter: Interaction):
-    data = load_gamble()
-    uid = str(inter.user.id)
-    if uid not in data["players"]:
-        await inter.response.send_message("你還沒加入賭局，用 /加入賭局。", ephemeral=True)
-        return
-
-    p = data["players"][uid]
-    win = p.get("win", 0)
-    lose = p.get("lose", 0)
-    total = win + lose
-    rate = int(win / total * 100) if total > 0 else 0
-
-    embed = nextcord.Embed(title="📊 賭博戰績", color=0x2f3136)
-    embed.add_field(name="玩家", value=p["name"], inline=False)
-    embed.add_field(name="勝場", value=str(win), inline=True)
-    embed.add_field(name="敗場", value=str(lose), inline=True)
-    embed.add_field(name="勝率", value=f"{rate}%", inline=True)
-    embed.add_field(name="目前點數", value=str(p.get("points", 0)), inline=False)
-
-    await inter.response.send_message(embed=embed, ephemeral=True)
-
-
-@bot.slash_command(name="戰績排行", description="賭博戰績排行榜（按勝率）")
-async def stats_rank(inter: Interaction):
-    data = load_gamble()
-    ranking = []
-
-    for p in data["players"].values():
-        win = p.get("win", 0)
-        lose = p.get("lose", 0)
-        total = win + lose
-        if total == 0:
-            continue
-        rate = win / total
-        ranking.append((p["name"], win, lose, rate))
-
-    ranking.sort(key=lambda x: x[3], reverse=True)
-    top10 = ranking[:10]
-
-    embed = nextcord.Embed(title="🏆 賭博戰績排行（前 10 名）", color=0x2f3136)
-
-    if not top10:
-        embed.add_field(name="無資料", value="目前還沒有任何人有勝敗紀錄。", inline=False)
-    else:
-        for i, (name, win, lose, rate) in enumerate(top10, start=1):
-            embed.add_field(
-                name=f"#{i} — {name}",
-                value=f"勝 {win} / 敗 {lose}（勝率 {int(rate*100)}%）",
-                inline=False,
-            )
-
-    await inter.response.send_message(embed=embed)
-
-
-@bot.slash_command(name="結束賭局", description="重置所有人的點數（保留戰績）")
-async def reset_gamble(inter: Interaction):
-    data = load_gamble()
-    if not data["players"]:
-        await inter.response.send_message("目前沒有任何賭局資料。", ephemeral=True)
-        return
-
-    for p in data["players"].values():
-        p["points"] = 5000
-
-    save_gamble(data)
-
-    embed = nextcord.Embed(title="🧹 賭局已重置", color=0x2f3136)
-    embed.description = "所有玩家點數已重置為 5000，勝敗戰績保留，可以開始新的一輪。"
-    await inter.response.send_message(embed=embed)
-
-
-
-
-# ====== 台北時區（一定要最前面） ======
-TAIPEI_TZ = timezone(timedelta(hours=8))
-
-# ====== 當兵專屬設定（你自己的日期） ======
-SERVICE_START_DATE = datetime(2025, 12, 1, tzinfo=TAIPEI_TZ)
-SERVICE_TOTAL_DAYS = 114
-SERVICE_END_DATE = SERVICE_START_DATE + timedelta(days=SERVICE_TOTAL_DAYS - 1)
-# =======================================
-
-# ====== 載入 .env（如果有）======
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
 
 
 
@@ -885,7 +617,372 @@ async def mission_cmd(ctx: commands.Context):
     await ctx.send(f"{ctx.author.mention} 今天的任務是：{m}")
 
 
+# ====== 工具 ======
 
+def ensure_player(data, uid, name):
+    if uid not in data["players"]:
+        data["players"][uid] = {
+            "name": name,
+            "points": 5000,
+            "win": 0,
+            "lose": 0,
+        }
+    if uid not in data["order"]:
+        data["order"].append(uid)
+
+def get_banker_uid(data):
+    if not data["order"]:
+        return None
+    if data["banker_index"] >= len(data["order"]):
+        data["banker_index"] = 0
+    return data["order"][data["banker_index"]]
+
+def rotate_banker(data):
+    for _ in range(len(data["order"])):
+        data["banker_index"] = (data["banker_index"] + 1) % len(data["order"])
+        uid = data["order"][data["banker_index"]]
+        p = data["players"].get(uid)
+        if p and p["points"] > 0 and not p.get("bankrupt"):
+            return
+
+def active_players(data):
+    return [uid for uid, p in data["players"].items() if p["points"] > 0 and not p.get("bankrupt")]
+
+def reset_round(data):
+    data["bets"] = {}
+    data["stage"] = "idle"
+    data["round"] = {
+        "player_rolls": {},
+        "player_infos": {},
+        "banker_roll": None,
+        "banker_info": None,
+    }
+
+def force_end_if_last_player(data):
+    alive = active_players(data)
+    if len(alive) == 1:
+        winner = alive[0]
+        winner_name = data["players"][winner]["name"]
+
+        for uid, p in data["players"].items():
+            p["points"] = 5000
+            p.pop("bankrupt", None)
+
+        reset_round(data)
+        save_gamble(data)
+
+        data["_force"] = winner_name
+        return True
+    return False
+
+def build_status_embed(data):
+    embed = nextcord.Embed(title="🎲 三顆骰子賭局", color=0x2f3136)
+
+    banker = get_banker_uid(data)
+    if banker:
+        p = data["players"][banker]
+        embed.add_field(name="🏦 莊家", value=f"{p['name']}（{p['points']}）", inline=False)
+
+    text = ""
+    for uid in data["order"]:
+        p = data["players"][uid]
+        mark = "（破產）" if p.get("bankrupt") else ""
+        text += f"- {p['name']}：{p['points']} {mark}\n"
+    embed.add_field(name="玩家列表", value=text or "無", inline=False)
+
+    return embed
+
+def build_rolling_embed(data):
+    embed = nextcord.Embed(title="🎲 擲骰階段", color=0x2f3136)
+
+    banker_uid = get_banker_uid(data)
+    banker = data["players"][banker_uid]
+    embed.add_field(name="🏦 莊家", value=f"{banker['name']}（{banker['points']}）", inline=False)
+
+    text = ""
+    for uid, bet in data["bets"].items():
+        p = data["players"][uid]
+        roll = data["round"]["player_rolls"].get(uid)
+        if roll:
+            dice_str = " ".join(dice_emoji[x] for x in roll)
+            info = data["round"]["player_infos"][uid]
+            text += f"{p['name']}：{bet} → {dice_str}（{info['type']}）\n"
+        else:
+            text += f"{p['name']}：{bet} → 尚未擲骰\n"
+    embed.add_field(name="閒家擲骰狀態", value=text, inline=False)
+
+    if data["round"]["banker_roll"]:
+        br = data["round"]["banker_roll"]
+        bi = data["round"]["banker_info"]
+        embed.add_field(
+            name="莊家擲骰",
+            value=f"{' '.join(dice_emoji[x] for x in br)}（{bi['type']}）",
+            inline=False,
+        )
+
+    return embed
+
+# ====== 按鈕 UI ======
+
+class GambleRollView(nextcord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @nextcord.ui.button(label="🎲 我要擲骰（閒家）", style=nextcord.ButtonStyle.primary)
+    async def roll_player(self, btn, inter):
+        data = load_gamble()
+        uid = str(inter.user.id)
+
+        if uid not in data["bets"]:
+            return await inter.response.send_message("你沒有下注。", ephemeral=True)
+
+        if uid in data["round"]["player_rolls"]:
+            return await inter.response.send_message("你已經擲過骰。", ephemeral=True)
+
+        d = roll3()
+        info = classify(d)
+        data["round"]["player_rolls"][uid] = d
+        data["round"]["player_infos"][uid] = info
+        save_gamble(data)
+
+        embed = build_rolling_embed(data)
+        await inter.response.edit_message(embed=embed, view=self)
+
+    @nextcord.ui.button(label="🏦 莊家擲骰並結算", style=nextcord.ButtonStyle.success)
+    async def roll_banker(self, btn, inter):
+        data = load_gamble()
+        banker = get_banker_uid(data)
+        if str(inter.user.id) != banker:
+            return await inter.response.send_message("只有莊家能按。", ephemeral=True)
+
+        # 檢查是否所有閒家都擲過骰
+        for uid in data["bets"]:
+            if uid not in data["round"]["player_rolls"]:
+                return await inter.response.send_message("還有閒家沒擲骰。", ephemeral=True)
+
+        # 擲莊家
+        d = roll3()
+        info = classify(d)
+        data["round"]["banker_roll"] = d
+        data["round"]["banker_info"] = info
+
+        # *** 以下結算太長，放在下一段 ***
+
+# ======== 開始結算 ========
+        banker_uid = banker
+        banker_p = data["players"][banker_uid]
+
+        result_text = ""
+        banker_val = info["value"]
+        banker_type = info["type"]
+
+        for pid, bet in data["bets"].items():
+            p = data["players"][pid]
+            roll = data["round"]["player_rolls"][pid]
+            info_p = data["round"]["player_infos"][pid]
+            pv = info_p["value"]
+            ptype = info_p["type"]
+
+            dice_str = " ".join(dice_emoji[x] for x in roll)
+
+            # --- 閒家 456（最大）---
+            if ptype == "456":
+                win = bet * 3
+                p["points"] += win
+                banker_p["points"] -= win
+                result_text += f"**{p['name']}**：{dice_str}（456）→ 贏三倍（+{win}）\n"
+                continue
+
+            # --- 閒家 123（最小）---
+            if ptype == "123":
+                lose = bet * 2
+                p["points"] -= lose
+                banker_p["points"] += lose
+                result_text += f"**{p['name']}**：{dice_str}（123）→ 輸兩倍（-{lose}）\n"
+                continue
+
+            # --- 一般比大小 ---
+            if pv > banker_val:
+                p["points"] += bet
+                banker_p["points"] -= bet
+                result_text += f"**{p['name']}**：{dice_str} → 勝（+{bet}）\n"
+            elif pv < banker_val:
+                p["points"] -= bet
+                banker_p["points"] += bet
+                result_text += f"**{p['name']}**：{dice_str} → 敗（-{bet}）\n"
+            else:
+                result_text += f"**{p['name']}**：{dice_str} → 平手\n"
+
+        # 處理破產
+        for uid, p in data["players"].items():
+            if p["points"] <= 0:
+                p["bankrupt"] = True
+
+        # 強制結束
+        forced = None
+        if force_end_if_last_player(data):
+            forced = data.pop("_force")
+
+        save_gamble(data)
+
+        # ======== 建立結果 Embed ========
+        embed = nextcord.Embed(title="🏆 本局結果", color=0xffd700)
+        br = data["round"]["banker_roll"]
+        bi = data["round"]["banker_info"]
+
+        embed.add_field(
+            name="莊家擲骰",
+            value=f"{' '.join(dice_emoji[x] for x in br)}（{bi['type']}）",
+            inline=False
+        )
+        embed.add_field(name="閒家結果", value=result_text or "無", inline=False)
+
+        if forced:
+            embed.add_field(
+                name="🎉 強制結束",
+                value=f"最終倖存者：**{forced}**\n點數已全部重置為 5000。",
+                inline=False
+            )
+
+        # 重置下一局
+        reset_round(data)
+        rotate_banker(data)
+        save_gamble(data)
+
+        await inter.response.edit_message(embed=embed, view=None)
+
+
+# =================== Slash 指令 ===================
+
+@bot.slash_command(name="加入賭局", description="加入三顆骰子賭局")
+async def join_game(inter: Interaction):
+    uid = str(inter.user.id)
+    data = load_gamble()
+
+    ensure_player(data, uid, inter.user.display_name)
+    save_gamble(data)
+
+    embed = nextcord.Embed(title="✔ 成功加入賭局", color=0x2f3136)
+    embed.add_field(name="玩家", value=inter.user.display_name, inline=False)
+    embed.add_field(name="目前點數", value=data["players"][uid]["points"])
+    await inter.response.send_message(embed=embed)
+
+
+@bot.slash_command(name="開始賭局", description="開始下注階段（莊家執行）")
+async def start_game(inter: Interaction):
+    uid = str(inter.user.id)
+    data = load_gamble()
+
+    banker = get_banker_uid(data)
+    if str(uid) != banker:
+        return await inter.response.send_message("只有莊家能開始賭局。", ephemeral=True)
+
+    data["stage"] = "betting"
+    data["bets"] = {}
+    save_gamble(data)
+
+    embed = nextcord.Embed(title="🎲 開始新的一局！", color=0x2f3136)
+    embed.add_field(name="莊家", value=data["players"][banker]["name"], inline=False)
+    embed.add_field(name="提醒", value="所有閒家請使用 `/下注 金額` 進行下注。", inline=False)
+
+    await inter.response.send_message(embed=embed)
+
+
+@bot.slash_command(name="下注", description="閒家下注")
+async def bet(inter: Interaction, amount: int = SlashOption(description="下注金額")):
+    uid = str(inter.user.id)
+    data = load_gamble()
+
+    if data["stage"] != "betting":
+        return await inter.response.send_message("現在不是下注階段。", ephemeral=True)
+
+    banker = get_banker_uid(data)
+    if uid == banker:
+        return await inter.response.send_message("莊家不能下注。", ephemeral=True)
+
+    ensure_player(data, uid, inter.user.display_name)
+    p = data["players"][uid]
+
+    if amount <= 0 or amount > p["points"]:
+        return await inter.response.send_message("下注金額不合法。", ephemeral=True)
+
+    data["bets"][uid] = amount
+    save_gamble(data)
+
+    embed = nextcord.Embed(title="💰 下注成功", color=0x2f3136)
+    embed.add_field(name="玩家", value=p["name"], inline=False)
+    embed.add_field(name="金額", value=amount)
+
+    await inter.response.send_message(embed=embed)
+
+    # 若全部閒家下注完畢 → 擲骰階段
+    all_ok = True
+    for pid in data["order"]:
+        if pid == banker:
+            continue
+        if data["players"][pid]["points"] > 0 and not data["players"][pid].get("bankrupt"):
+            if pid not in data["bets"]:
+                all_ok = False
+                break
+
+    if all_ok:
+        data["stage"] = "rolling"
+        save_gamble(data)
+
+        embed = build_rolling_embed(data)
+        await inter.followup.send(embed=embed, view=GambleRollView())
+
+
+@bot.slash_command(name="結束賭局", description="強制重置賭局（管理者）")
+async def end_game(inter: Interaction):
+    data = load_gamble()
+    reset_round(data)
+
+    for uid, p in data["players"].items():
+        p["points"] = 5000
+        p.pop("bankrupt", None)
+
+    save_gamble(data)
+
+    embed = nextcord.Embed(title="📌 賭局已重置", color=0xffd700)
+    embed.add_field(name="說明", value="所有點數已重置為 5000，勝敗紀錄保留！")
+
+    await inter.response.send_message(embed=embed)
+
+
+@bot.slash_command(name="戰績", description="查看自己的勝敗紀錄")
+async def my_stats(inter: Interaction):
+    uid = str(inter.user.id)
+    data = load_gamble()
+    if uid not in data["players"]:
+        return await inter.response.send_message("你還沒加入賭局。", ephemeral=True)
+
+    p = data["players"][uid]
+    win = p.get("win", 0)
+    lose = p.get("lose", 0)
+    total = win + lose
+    rate = f"{int(win/total*100)}%" if total else "0%"
+
+    embed = nextcord.Embed(title="📊 賭場戰績", color=0x2f3136)
+    embed.add_field(name="玩家", value=p["name"], inline=False)
+    embed.add_field(name="勝", value=win)
+    embed.add_field(name="敗", value=lose)
+    embed.add_field(name="勝率", value=rate)
+
+    await inter.response.send_message(embed=embed)
+
+
+@bot.slash_command(name="賭場排行", description="點數排行榜（前 10 名）")
+async def point_rank(inter: Interaction):
+    data = load_gamble()
+
+    ranking = sorted(data["players"].items(), key=lambda x: x[1]["points"], reverse=True)
+    embed = nextcord.Embed(title="🏆 點數排行榜", color=0x2f3136)
+
+    for i, (uid, p) in enumerate(ranking[:10], start=1):
+        embed.add_field(name=f"#{i} {p['name']}", value=f"{p['points']} 點", inline=False)
+
+    await inter.response.send_message(embed=embed)
 
 
 def get_expedition_comment(damage: int) -> str:
