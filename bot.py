@@ -490,123 +490,6 @@ async def mission_cmd(ctx: commands.Context):
 
 # ---------- 6. 記錄小語錄的指令 ----------
 
-@bot.command(name="記錄", aliases=["記一下", "記", "紀錄"])
-async def remember_cmd(ctx: commands.Context, *, text: str):
-    """幫你把一句話記起來，之後可以用 !語錄 看。"""
-    add_user_note(ctx.author.id, text)
-    await ctx.send(f"{ctx.author.mention} 好，我記得了( ")
-
-
-@bot.command(name="語錄", aliases=["小語錄"])
-async def show_notes_cmd(ctx: commands.Context):
-    """顯示你自己記錄過的幾句話。"""
-    notes = get_user_notes(ctx.author.id)
-    if not notes:
-        await ctx.send(f"{ctx.author.mention} 你目前還沒有跟我說要記住什麼東西( ")
-        return
-
-    # 只顯示最後 5 則
-    last_notes = notes[-5:]
-    lines = [f"{i}. {t}" for i, t in enumerate(last_notes, start=1)]
-    await ctx.send(
-        f"{ctx.author.mention} 這是我記得、跟你有關的幾句話：\n" + "\n".join(lines)
-    )
-
-
-# 啟動時就先把記憶載進來
-load_memory()
-
-@bot.command(name="我的留言", aliases=["我講了多少", "個人統計", "留言數"])
-async def personal_stats(ctx: commands.Context):
-    """顯示個人的留言統計。"""
-
-    uid = ctx.author.id
-
-    total = USER_MESSAGE_COUNT.get(uid, 0)
-    night = USER_NIGHT_MESSAGE_COUNT.get(uid, 0)
-
-    # 如果完全沒有紀錄
-    if total == 0:
-        await ctx.send(f"{ctx.author.mention} 你在這裡講話還太少，我根本抽不出你的樣子啦( ")
-        return
-
-    # ------ 計算排名 ------
-    sorted_users = sorted(
-        USER_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True
-    )
-    rank = next((i for i, (u, _) in enumerate(sorted_users, start=1) if u == uid), None)
-
-    # ------ 千惠式分析 ------
-    rank_comment = ""
-    if rank == 1:
-        rank_comment = "…你是這裡最吵的那個，我每天都看得到你，但謝了w( "
-    elif rank <= 5:
-        rank_comment = "你一直都是活躍的那幾個呢…我其實一直知道你很常來找大家講話呢( "
-    elif rank <= 15:
-        rank_comment = "還可以吧，但沒事啦，我看得出你偶爾會忙啦，有空再來就好( "
-    else:
-        rank_comment = "中後段，會讓我覺得你是不是太累了，還好你偶爾會來找我一下( "
-
-    night_comment = ""
-    if night > 30:
-        night_comment = "還有…你深夜講話真的很多，你是不是都不睡覺？記得要多睡覺捏( "
-    elif night > 10:
-        night_comment = "深夜訊息有一點，但還不算太誇張…不可以太晚睡啦，我會生氣喔( "
-    else:
-        night_comment = "深夜很少看到你，這樣比較好，至少你睡得比我放心( "
-
-    embed = nextcord.Embed(
-        title=f"📘 你的個人留言統計",
-        color=0xFFB7C5
-    )
-
-    embed.add_field(name="你的總留言數", value=f"{total} 則", inline=False)
-    embed.add_field(name="你的排名", value=f"第 **{rank} 名**", inline=False)
-    embed.add_field(name="深夜留言", value=f"{night} 則", inline=False)
-
-    embed.add_field(
-        name="千惠偷偷補一句：",
-        value=f"{rank_comment}\n{night_comment}",
-        inline=False
-    )
-
-    await ctx.send(embed=embed)
-
-
-@bot.command()
-async def top(ctx):
-    """千惠的留言排行榜 Top 25"""
-
-    # 防呆：檢查檔案是否存在
-    if not os.path.exists("user_message_counts.json"):
-        await ctx.send("紀錄檔不存在喔… 我沒有辦法算排行榜。")
-        return
-
-    # 讀取檔案
-    with open("user_message_counts.json", "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    # 排序
-    sorted_users = sorted(data.items(), key=lambda x: x[1], reverse=True)
-    top25 = sorted_users[:25]
-
-    # 建立訊息
-    lines = []
-    rank = 1
-    for user_id, count in top25:
-        user = ctx.guild.get_member(int(user_id))
-        username = user.mention if user else f"未知使用者({user_id})"
-        lines.append(f"{rank}. {username} — **{count} 則**")
-        rank += 1
-
-    message = (
-        "🌟 **《伺服器留言排行榜 Top 25》**\n"
-        "> 「我每天都在看著你們講話啦……所以我做了這個。欸… 我偷偷整理的啦，你們不要笑我。」\n\n"
-        + "\n".join(lines) +
-        "\n\n> 「你們每天講話的樣子… 我都在旁邊看著。真的。謝謝你們一直讓伺服器這麼熱鬧。」"
-    )
-
-    await ctx.send(message)
 
 
 
@@ -816,6 +699,12 @@ async def on_message(message):
     month[user_id] = month.get(user_id, 0) + 1
     save_json(month_file, month)
 
+    # === 更新總計（排行榜 Top 使用） ===
+    counts = load_json("user_message_counts.json")
+    counts[user_id] = counts.get(user_id, 0) + 1
+    save_json("user_message_counts.json", counts)
+
+
     # 統計訊息
     update_message_stats(message)
 
@@ -918,7 +807,40 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
+@bot.command()
+async def top(ctx):
+    """千惠的留言排行榜 Top 25"""
 
+    # 防呆：檢查檔案是否存在
+    if not os.path.exists("user_message_counts.json"):
+        await ctx.send("紀錄檔不存在喔… 我沒有辦法算排行榜。")
+        return
+
+    # 讀取檔案
+    with open("user_message_counts.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # 排序
+    sorted_users = sorted(data.items(), key=lambda x: x[1], reverse=True)
+    top25 = sorted_users[:25]
+
+    # 建立訊息
+    lines = []
+    rank = 1
+    for user_id, count in top25:
+        user = ctx.guild.get_member(int(user_id))
+        username = user.mention if user else f"未知使用者({user_id})"
+        lines.append(f"{rank}. {username} — **{count} 則**")
+        rank += 1
+
+    message = (
+        "🌟 **《伺服器留言排行榜 Top 25》**\n"
+        "> 「我每天都在看著你們講話啦……所以我做了這個。欸… 我偷偷整理的啦，你們不要笑我。」\n\n"
+        + "\n".join(lines) +
+        "\n\n> 「你們每天講話的樣子… 我都在旁邊看著。真的。謝謝你們一直讓伺服器這麼熱鬧。」"
+    )
+
+    await ctx.send(message)
 
 @tasks.loop(minutes=1)
 async def daily_reset_task():
@@ -988,7 +910,87 @@ async def monthly_report_task():
         print("每月統計已重置。")
 
 
+@bot.command(name="記錄", aliases=["記一下", "記", "紀錄"])
+async def remember_cmd(ctx: commands.Context, *, text: str):
+    """幫你把一句話記起來，之後可以用 !語錄 看。"""
+    add_user_note(ctx.author.id, text)
+    await ctx.send(f"{ctx.author.mention} 好，我記得了( ")
 
+
+@bot.command(name="語錄", aliases=["小語錄"])
+async def show_notes_cmd(ctx: commands.Context):
+    """顯示你自己記錄過的幾句話。"""
+    notes = get_user_notes(ctx.author.id)
+    if not notes:
+        await ctx.send(f"{ctx.author.mention} 你目前還沒有跟我說要記住什麼東西( ")
+        return
+
+    # 只顯示最後 5 則
+    last_notes = notes[-5:]
+    lines = [f"{i}. {t}" for i, t in enumerate(last_notes, start=1)]
+    await ctx.send(
+        f"{ctx.author.mention} 這是我記得、跟你有關的幾句話：\n" + "\n".join(lines)
+    )
+
+
+# 啟動時就先把記憶載進來
+load_memory()
+
+@bot.command(name="我的留言", aliases=["我講了多少", "個人統計", "留言數"])
+async def personal_stats(ctx: commands.Context):
+    """顯示個人的留言統計。"""
+
+    uid = ctx.author.id
+
+    total = USER_MESSAGE_COUNT.get(uid, 0)
+    night = USER_NIGHT_MESSAGE_COUNT.get(uid, 0)
+
+    # 如果完全沒有紀錄
+    if total == 0:
+        await ctx.send(f"{ctx.author.mention} 你在這裡講話還太少，我根本抽不出你的樣子啦( ")
+        return
+
+    # ------ 計算排名 ------
+    sorted_users = sorted(
+        USER_MESSAGE_COUNT.items(), key=lambda x: x[1], reverse=True
+    )
+    rank = next((i for i, (u, _) in enumerate(sorted_users, start=1) if u == uid), None)
+
+    # ------ 千惠式分析 ------
+    rank_comment = ""
+    if rank == 1:
+        rank_comment = "…你是這裡最吵的那個，我每天都看得到你，但謝了w( "
+    elif rank <= 5:
+        rank_comment = "你一直都是活躍的那幾個呢…我其實一直知道你很常來找大家講話呢( "
+    elif rank <= 15:
+        rank_comment = "還可以吧，但沒事啦，我看得出你偶爾會忙啦，有空再來就好( "
+    else:
+        rank_comment = "中後段，會讓我覺得你是不是太累了，還好你偶爾會來找我一下( "
+
+    night_comment = ""
+    if night > 30:
+        night_comment = "還有…你深夜講話真的很多，你是不是都不睡覺？記得要多睡覺捏( "
+    elif night > 10:
+        night_comment = "深夜訊息有一點，但還不算太誇張…不可以太晚睡啦，我會生氣喔( "
+    else:
+        night_comment = "深夜很少看到你，這樣比較好，至少你睡得比我放心( "
+
+    embed = nextcord.Embed(
+        title=f"📘 你的個人留言統計",
+        color=0xFFB7C5
+    )
+
+    embed.add_field(name="你的總留言數", value=f"{total} 則", inline=False)
+    embed.add_field(name="你的排名", value=f"第 **{rank} 名**", inline=False)
+    embed.add_field(name="深夜留言", value=f"{night} 則", inline=False)
+
+    embed.add_field(
+        name="千惠偷偷補一句：",
+        value=f"{rank_comment}\n{night_comment}",
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
 
 
 
