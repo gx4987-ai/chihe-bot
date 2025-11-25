@@ -4,5 +4,10 @@
     "banker_index": 0,
     "bets": {},
     "stage": "idle",
-    "round": {}
+    "round": {
+    "player_rolls": {},
+    "player_infos": {},
+    "banker_roll": None,
+    "banker_info": None,
+}
 }
