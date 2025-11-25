@@ -12,10 +12,11 @@ import io                       # 給 build_top10_image 用
 # ===== 載入 TOKEN =====
 import os
 
-TOKEN = os.getenv("TOKEN")  # Railway Variables 使用 TOKEN 這個名稱
+# 取得 Discord bot token：支援 Railway 的 DISCORD_TOKEN
+TOKEN = os.getenv("DISCORD_TOKEN")
 
-if TOKEN is None:
-    raise RuntimeError("❌ ERROR: 找不到 TOKEN，請到 Railway → Variables 設定 TOKEN")
+if not TOKEN:
+    raise RuntimeError("❌ ERROR: 找不到 DISCORD_TOKEN，請到 Railway → Variables 設定它。")
 
 
 from datetime import datetime, timezone, timedelta
