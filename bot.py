@@ -2,45 +2,48 @@
 
 
 
-# 取得 Discord bot token：支援 Railway 的 DISCORD_TOKEN
-TOKEN = os.getenv("DISCORD_TOKEN")
 
-if not TOKEN:
-    raise RuntimeError("❌ ERROR: 找不到 DISCORD_TOKEN，請到 Railway → Variables 設定它。")
 
+# ==============================
+#      Clean & Safe Imports
+# ==============================
 
 import os
 import re
+import io
 import json
 import time
 import random
-from collections import defaultdict
-from datetime import datetime, timezone, timedelta
-
 import aiohttp
-from PIL import Image, ImageDraw
-import io
+from typing import Dict, Tuple, Optional
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
+# Pillow for image
+from PIL import Image, ImageDraw
+
+# Nextcord
 import nextcord
 from nextcord import Interaction, SlashOption
 from nextcord.ui import View, button
 from nextcord.ext import commands, tasks
-import matplotlib.pyplot as plt
 
-
-# 訊息檔案路徑
-
-
-# ---- Intents ----
+# Bot intents
 intents = nextcord.Intents.default()
-intents.message_content = True  # 記得 Dev Portal 要開
-
+intents.message_content = True
 
 bot = commands.Bot(
     command_prefix="!",
     intents=intents
 )
 
+
+# 取得 Discord bot token：支援 Railway 的 DISCORD_TOKEN
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+if not TOKEN:
+    raise RuntimeError("❌ ERROR: 找不到 DISCORD_TOKEN，請到 Railway → Variables 設定它。")
 
 # ---- 近 90 天留言統計（畫圖用） ----
 from collections import defaultdict
