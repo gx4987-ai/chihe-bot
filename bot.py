@@ -91,26 +91,44 @@ intents = nextcord.Intents.default()
 intents.message_content = True  # 記得在 Dev Portal 也要開啟 Message Content Intent
 
 from nextcord.ext import tasks
+from datetime import datetime, time, timedelta
+import pytz
 
-@tasks.loop(hours=24)
+TAIWAN_TZ = pytz.timezone("Asia/Taipei")
+
+# ===============================
+# 🎯 每天早上 8:00 自動執行
+# ===============================
+@tasks.loop(minutes=1)
 async def daily_job_task():
-    print("🕒 Daily Job 正在執行…")
-    # 在這裡寫你的每日任務內容
+    now = datetime.now(TAIWAN_TZ).time()
+    target = time(hour=8, minute=0)
 
+    # 只在 08:00 這分鐘執行一次
+    if now.hour == target.hour and now.minute == target.minute:
+        print("🟢 Daily Job 執行！")
+
+        channel_id = 你的每日訊息頻道ID
+        channel = bot.get_channel(channel_id)
+
+        if channel:
+            await channel.send("📢 每日訊息來囉！")
+        else:
+            print("❌ 找不到每日訊息頻道")
+
+# --------- 確保 bot ready 後才啟動 ----------
+@daily_job_task.before_loop
+async def before_daily_task():
+    print("⏳ Daily Job 等待 Bot 啟動…")
+    await bot.wait_until_ready()
+    print("✅ Daily Job 已啟動！")
+
+
+# --------- on_ready 還是保留（但不要在裡面手動 start）----------
 @bot.event
 async def on_ready():
-    print(f"🟢 Bot 已啟動：{bot.user} (ID: {bot.user.id})")
+    print(f"🌟 Bot 已啟動：{bot.user}")
 
-    # 啟動每日任務
-    if not daily_job_task.is_running():
-        daily_job_task.start()
-
-    # 同步 slash 指令
-    try:
-        synced = await bot.sync_application_commands()
-        print(f"✔️ 已同步 {len(synced)} 個 Slash 指令")
-    except Exception as e:
-        print("❌ 同步指令時發生錯誤:", e)
 
 
 # ===== 時區設定 =====
