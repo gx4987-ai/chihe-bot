@@ -128,10 +128,10 @@ from nextcord import Interaction, SlashOption
 
 GAMBLE_FILE = "gamble_data.json"
 
-
 def load_gamble():
+    # 檔案不存在 → 建立新的
     if not os.path.exists(GAMBLE_FILE):
-        return {
+        data = {
             "players": {},
             "order": [],
             "banker_index": 0,
@@ -144,6 +144,44 @@ def load_gamble():
                 "banker_info": None,
             },
         }
+        save_gamble(data)
+        return data
+
+    # 檔案存在 → 嘗試讀取
+    try:
+        with open(GAMBLE_FILE, "r", encoding="utf8") as f:
+            data = json.load(f)
+
+        # 防呆：損壞或不是 dict → 重建
+        if not isinstance(data, dict):
+            raise ValueError("gamble_data.json 損壞")
+
+        return data
+
+    except Exception as e:
+        print("⚠️ gamble_data.json 讀取失敗，正在重建 →", e)
+
+        data = {
+            "players": {},
+            "order": [],
+            "banker_index": 0,
+            "bets": {},
+            "stage": "idle",
+            "round": {
+                "player_rolls": {},
+                "player_infos": {},
+                "banker_roll": None,
+                "banker_info": None,
+            },
+        }
+        save_gamble(data)
+        return data
+
+def save_gamble(data):
+    with open(GAMBLE_FILE, "w", encoding="utf8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+
 
 # ====== 頻道設定 ======
 # 每日固定訊息要發的頻道
