@@ -110,11 +110,29 @@ TAIPEI_TZ = timezone(timedelta(hours=8))
 
 from nextcord.ext import tasks
 
+@daily_job_task.before_loop
+async def before_daily_job():
+    print("⏳ Daily Job 等待 Bot 準備完成…")
+    await bot.wait_until_ready()
+
+    # 設定為每天 08:00 觸發
+    now = datetime.now(TAIPEI_TZ)
+    target = now.replace(hour=8, minute=0, second=0, microsecond=0)
+
+    if target < now:
+        target += timedelta(days=1)
+
+    wait_seconds = (target - now).total_seconds()
+    print(f"⏳ 等待 {wait_seconds} 秒後開始每日任務")
+    await asyncio.sleep(wait_seconds)
+    print("✅ 已到 8:00，開始每日任務")
+
+
 @tasks.loop(hours=24)
 async def daily_job_task():
     print("🟡 Daily Job 正在執行…")
 
-    channel = bot.get_channel(你的頻道ID)  # ← 記得填
+    channel = bot.get_channel(DAILY_CHANNEL_ID)  # ← 記得填
     if channel is None:
         print("❌ 找不到每日訊息頻道")
         return
@@ -1984,7 +2002,7 @@ async def cmd_next_round(inter: Interaction):
 
     # 還沒結束 → 進入下一輪
     embed = build_table_embed(data, title="🔄 進入下一輪")
-    embed.add_field(
+        embed.add_field(
         name="提示",
         value="閒家請使用 `/下注` 下本輪賭注，莊家之後用 `/莊家骰` 開局。",
         inline=False
