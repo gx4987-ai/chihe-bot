@@ -1,16 +1,6 @@
 
 
-import os
-import re
-import random
-import time
-import aiohttp
-from PIL import Image, ImageDraw
-import io                       # 給 build_top10_image 用
 
-
-# ===== 載入 TOKEN =====
-import os
 
 # 取得 Discord bot token：支援 Railway 的 DISCORD_TOKEN
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -18,25 +8,28 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 if not TOKEN:
     raise RuntimeError("❌ ERROR: 找不到 DISCORD_TOKEN，請到 Railway → Variables 設定它。")
 
-import os
-import json
-import random
-from datetime import datetime, timezone, timedelta
-import time     # ← 正確的 time 模組
 
-from typing import Dict, Tuple, Optional
+import os
+import re
+import json
+import time
+import random
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
+
+import aiohttp
+from PIL import Image, ImageDraw
+import io
 
 import nextcord
 from nextcord import Interaction, SlashOption
 from nextcord.ui import View, button
 from nextcord.ext import commands, tasks
+import matplotlib.pyplot as plt
 
 
 # 訊息檔案路徑
-import json
-import os
-import nextcord
-from nextcord.ext import commands, tasks
+
 
 # ---- Intents ----
 intents = nextcord.Intents.default()
@@ -94,7 +87,6 @@ intents.message_content = True  # 記得在 Dev Portal 也要開啟 Message Cont
 
 
 from datetime import datetime, timezone, timedelta
-import time     # ← 正確的 time 模組
 
 from zoneinfo import ZoneInfo
 
@@ -103,27 +95,40 @@ from zoneinfo import ZoneInfo
 TAIPEI_TZ = timezone(timedelta(hours=8))
 
 
-# ===============================
-# 🎯 每天早上 8:00 自動執行
-# ===============================
-# ===== 每日任務 =====
+# ==========================
+#   每日訊息：每分鐘偵測是否為 08:00
+# ==========================
 
-from nextcord.ext import tasks
+from zoneinfo import ZoneInfo
+TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
-# ===== 時區設定 =====
-from datetime import datetime, timezone, timedelta
-import asyncio
-import json
+# 設定要發送每日訊息的頻道
+DAILY_CHANNEL_ID = 901501574105399396   # ← 你提供的頻道 ID
 
-TAIPEI_TZ = timezone(timedelta(hours=8))
-
-# 你的每日訊息頻道
-DAILY_CHANNEL_ID = 901501574105399396
+LAST_SENT_DATE_FILE = "last_sent_date.json"
 
 
-# ===== 讀取 messages.json =====
+def load_last_sent_date() -> str:
+    """讀取上次發送日期（避免重複發）。"""
+    if not os.path.exists(LAST_SENT_DATE_FILE):
+        return ""
+    try:
+        with open(LAST_SENT_DATE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f).get("date", "")
+    except:
+        return ""
+
+
+def save_last_sent_date(date_str: str):
+    """儲存上次發送日期。"""
+    with open(LAST_SENT_DATE_FILE, "w", encoding="utf-8") as f:
+        json.dump({"date": date_str}, f, ensure_ascii=False)
+
+
 def get_today_message() -> Optional[str]:
+    """按照 messages.json 讀取今日訊息。"""
     today_str = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d")
+
     try:
         with open("messages.json", "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -132,6 +137,7 @@ def get_today_message() -> Optional[str]:
             if entry.get("date") == today_str:
                 title = entry.get("title", "")
                 content = entry.get("content", "")
+
                 if title and content:
                     return f"{title}\n\n{content}"
                 elif content:
@@ -142,45 +148,45 @@ def get_today_message() -> Optional[str]:
                     return None
 
         return None
+
     except Exception as e:
         print("讀取 messages.json 發生錯誤：", e)
         return None
 
 
-# ===== 每日任務 =====
-
-@tasks.loop(hours=24)
+@tasks.loop(minutes=1)
 async def daily_job_task():
-    print("🟡 Daily Job 正在執行…")
+    """每分鐘檢查一次是否達到 08:00。"""
+    now = datetime.now(TAIPEI_TZ)
+    today_date = now.strftime("%Y-%m-%d")
+    last_sent = load_last_sent_date()
 
-    channel = bot.get_channel(DAILY_CHANNEL_ID)
-    if channel is None:
-        print("❌ 找不到每日訊息頻道")
-        return
+    # 08:00 且今天還沒發過
+    if now.hour == 8 and now.minute == 0 and last_sent != today_date:
 
-    msg = get_today_message()
-    if msg:
+        channel = bot.get_channel(DAILY_CHANNEL_ID)
+        if channel is None:
+            print("❌ 找不到 DAILY_CHANNEL_ID 目標頻道")
+            return
+
+        msg = get_today_message()
+        if msg is None:
+            msg = "今天沒有預設訊息，但願你有美好的一天 ☀️"
+
         await channel.send(msg)
+        save_last_sent_date(today_date)
+
+        print("✅ 已發送今日每日訊息")
+
     else:
-        print("（今日沒有每日訊息）")
+        print(f"⏳ {now.strftime('%H:%M')} 已檢查，尚未到發送時間或已發送過。")
 
 
 @daily_job_task.before_loop
 async def before_daily_job():
-    print("⏳ Daily Job 等待 Bot 準備完成…")
+    print("⏳ Daily Job 等待 bot 準備完成…")
     await bot.wait_until_ready()
-
-    now = datetime.now(TAIPEI_TZ)
-    target = now.replace(hour=8, minute=0, second=0, microsecond=0)
-
-    # 若已過 08:00 → 等明天
-    if target < now:
-        target += timedelta(days=1)
-
-    wait_seconds = (target - now).total_seconds()
-    print(f"⏳ 等待 {wait_seconds} 秒後開始每日任務")
-    await asyncio.sleep(wait_seconds)
-    print("✅ 已到 8:00，開始每日任務")
+    print("✅ Daily Job 已開始運作（每分鐘檢查一次）")
 
 
 @bot.event
@@ -188,6 +194,7 @@ async def on_ready():
     print(f"🤖 Bot 已啟動：{bot.user}")
     if not daily_job_task.is_running():
         daily_job_task.start()
+
 
 
 # ====== 頻道設定 ======
@@ -782,8 +789,6 @@ def is_keyword_triggered(keyword: str, text: str) -> bool:
     return re.match(pattern, text) is not None
 
 
-
-import time
 
 
 @bot.event
@@ -2594,7 +2599,6 @@ async def today_report(ctx: commands.Context):
         "我覺得你們講話講的比我在軍中跑步還累欸( ",
     ]
 
-    import random
     comment = random.choice(comments)
 
     embed = nextcord.Embed(
@@ -2664,9 +2668,6 @@ async def today_report(ctx: commands.Context):
 
 
 
-
-import matplotlib.pyplot as plt
-import io
 
 @bot.command(name="留言走勢", aliases=["訊息走勢", "伺服器走勢"])
 async def message_trend(ctx: commands.Context):
@@ -3012,8 +3013,7 @@ if __name__ == "__main__":
 # 真心話大冒險 TOD 系統
 # ============================================================
 
-import random
-import nextcord
+
 from nextcord.ext import commands
 from nextcord import Interaction, SlashOption, ui
 
