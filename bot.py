@@ -9,7 +9,13 @@ from PIL import Image, ImageDraw
 import io                       # 給 build_top10_image 用
 
 
+# ===== 載入 TOKEN =====
+import os
 
+TOKEN = os.getenv("TOKEN")  # Railway Variables 使用 TOKEN 這個名稱
+
+if TOKEN is None:
+    raise RuntimeError("❌ ERROR: 找不到 TOKEN，請到 Railway → Variables 設定 TOKEN")
 
 
 from datetime import datetime, timezone, timedelta
@@ -2552,11 +2558,10 @@ async def before_send_daily_message():
     print("🕒 排程已啟動。")
 
 
+# ===== 程式進入點 =====
 if __name__ == "__main__":
-    if not TOKEN:
-        raise RuntimeError("找不到 DISCORD_TOKEN 環境變數，請在 Railway / 本機環境設定它。")
+    print("🚀 Bot 正在啟動...")
     bot.run(TOKEN)
-
 # ============================================================
 # 真心話大冒險 TOD 系統
 # ============================================================
