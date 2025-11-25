@@ -724,17 +724,21 @@ class GambleRollView(nextcord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @nextcord.ui.button(label="🎲 我要擲骰（閒家）", style=nextcord.ButtonStyle.primary)
-    async def roll_player(self, btn, inter):
+    # =========================
+    # 🎲 閒家擲骰
+    # =========================
+    @nextcord.ui.button(label="🎲 我（閒家）擲骰", style=nextcord.ButtonStyle.primary)
+    async def roll_player(self, btn, inter: Interaction):
         data = load_gamble()
         uid = str(inter.user.id)
 
         if uid not in data["bets"]:
-            return await inter.response.send_message("你沒有下注。", ephemeral=True)
+            return await inter.response.send_message("你還沒有下注。", ephemeral=True)
 
         if uid in data["round"]["player_rolls"]:
             return await inter.response.send_message("你已經擲過骰。", ephemeral=True)
 
+        # 擲骰
         d = [random.randint(1, 6) for _ in range(3)]
         info = classify(d)
         data["round"]["player_rolls"][uid] = d
@@ -744,108 +748,62 @@ class GambleRollView(nextcord.ui.View):
         embed = build_rolling_embed(data)
         await inter.response.edit_message(embed=embed, view=self)
 
-    @nextcord.ui.button(label="🏦 莊家擲骰並結算", style=nextcord.ButtonStyle.success)
-    async def roll_banker(self, btn, inter):
+    # =========================
+    # 🎲 莊家擲骰
+    # =========================
+    @nextcord.ui.button(label="🎲 莊家擲骰", style=nextcord.ButtonStyle.success)
+    async def roll_banker(self, btn, inter: Interaction):
         data = load_gamble()
         banker = get_banker_uid(data)
-        if str(inter.user.id) != banker:
-            return await inter.response.send_message("只有莊家能按。", ephemeral=True)
 
-        # 檢查是否所有閒家都擲過骰
+        if str(inter.user.id) != banker:
+            return await inter.response.send_message("只有莊家能擲骰。", ephemeral=True)
+
+        # 是否所有閒家都已擲骰?
         for uid in data["bets"]:
             if uid not in data["round"]["player_rolls"]:
-                return await inter.response.send_message("還有閒家沒擲骰。", ephemeral=True)
+                return await inter.response.send_message("還有閒家尚未擲骰。", ephemeral=True)
 
-        # 擲莊家
-        d = roll3()
+        # 擲莊家骰
+        d = [random.randint(1, 6) for _ in range(3)]
         info = classify(d)
         data["round"]["banker_roll"] = d
         data["round"]["banker_info"] = info
-
-        # *** 以下結算太長，放在下一段 ***
-
-# ======== 開始結算 ========
-        banker_uid = banker
-        banker_p = data["players"][banker_uid]
-
-        result_text = ""
-        banker_val = info["value"]
-        banker_type = info["type"]
-
-        for pid, bet in data["bets"].items():
-            p = data["players"][pid]
-            roll = data["round"]["player_rolls"][pid]
-            info_p = data["round"]["player_infos"][pid]
-            pv = info_p["value"]
-            ptype = info_p["type"]
-
-            dice_str = " ".join(dice_emoji[x] for x in roll)
-
-            # --- 閒家 456（最大）---
-            if ptype == "456":
-                win = bet * 3
-                p["points"] += win
-                banker_p["points"] -= win
-                result_text += f"**{p['name']}**：{dice_str}（456）→ 贏三倍（+{win}）\n"
-                continue
-
-            # --- 閒家 123（最小）---
-            if ptype == "123":
-                lose = bet * 2
-                p["points"] -= lose
-                banker_p["points"] += lose
-                result_text += f"**{p['name']}**：{dice_str}（123）→ 輸兩倍（-{lose}）\n"
-                continue
-
-            # --- 一般比大小 ---
-            if pv > banker_val:
-                p["points"] += bet
-                banker_p["points"] -= bet
-                result_text += f"**{p['name']}**：{dice_str} → 勝（+{bet}）\n"
-            elif pv < banker_val:
-                p["points"] -= bet
-                banker_p["points"] += bet
-                result_text += f"**{p['name']}**：{dice_str} → 敗（-{bet}）\n"
-            else:
-                result_text += f"**{p['name']}**：{dice_str} → 平手\n"
-
-        # 處理破產
-        for uid, p in data["players"].items():
-            if p["points"] <= 0:
-                p["bankrupt"] = True
-
-        # 強制結束
-        forced = None
-        if force_end_if_last_player(data):
-            forced = data.pop("_force")
-
         save_gamble(data)
 
-        # ======== 建立結果 Embed ========
-        embed = nextcord.Embed(title="🏆 本局結果", color=0xffd700)
-        br = data["round"]["banker_roll"]
-        bi = data["round"]["banker_info"]
+        embed = build_rolling_embed(data)
+        await inter.response.edit_message(embed=embed, view=self)
 
-        embed.add_field(
-            name="莊家擲骰",
-            value=f"{' '.join(dice_emoji[x] for x in br)}（{bi['type']}）",
-            inline=False
-        )
-        embed.add_field(name="閒家結果", value=result_text or "無", inline=False)
+    # =========================
+    # 🏁 結算
+    # =========================
+    @nextcord.ui.button(label="🏁 結算賭局", style=nextcord.ButtonStyle.secondary)
+    async def do_settle(self, btn, inter: Interaction):
+        data = load_gamble()
+        banker = get_banker_uid(data)
 
-        if forced:
-            embed.add_field(
-                name="🎉 強制結束",
-                value=f"最終倖存者：**{forced}**\n點數已全部重置為 5000。",
-                inline=False
-            )
+        if str(inter.user.id) != banker:
+            return await inter.response.send_message("只有莊家能結算。", ephemeral=True)
 
-        # 重置下一局
+        # 必須莊家已擲骰
+        if data["round"]["banker_roll"] is None:
+            return await inter.response.send_message("莊家尚未擲骰。", ephemeral=True)
+
+        # 必須所有閒家已擲骰
+        for uid in data["bets"]:
+            if uid not in data["round"]["player_rolls"]:
+                return await inter.response.send_message("還有閒家尚未擲骰。", ephemeral=True)
+
+        # 開始結算
+        result = settle_round(data)
+        save_gamble(data)
+
+        await inter.response.send_message(embed=result, ephemeral=False)
+
+        # 重置遊戲狀態
         reset_round(data)
-        rotate_banker(data)
         save_gamble(data)
-
-        await inter.response.edit_message(embed=embed, view=None)
+        rotate_banker(data)
 
 
 # =================== Slash 指令 ===================
