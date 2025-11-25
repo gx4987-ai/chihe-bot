@@ -92,9 +92,11 @@ intents.message_content = True  # 記得在 Dev Portal 也要開啟 Message Cont
 
 from nextcord.ext import tasks
 from datetime import datetime, time, timedelta
-import pytz
+from zoneinfo import ZoneInfo
 
-TAIWAN_TZ = pytz.timezone("Asia/Taipei")
+
+TAIWAN_TZ = ZoneInfo("Asia/Taipei")
+
 
 # ===============================
 # 🎯 每天早上 8:00 自動執行

@@ -1,0 +1,8 @@
+{
+    "USER_ID": {
+        "name": "玩家名稱",
+        "win": 0,
+        "lose": 0,
+        "profit": 0
+    }
+}
