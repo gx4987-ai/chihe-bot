@@ -22,6 +22,8 @@ import os
 import json
 import random
 from datetime import datetime, timezone, timedelta
+import time     # ← 正確的 time 模組
+
 from typing import Dict, Tuple, Optional
 
 import nextcord
@@ -90,52 +92,57 @@ messages = load_messages()
 intents = nextcord.Intents.default()
 intents.message_content = True  # 記得在 Dev Portal 也要開啟 Message Content Intent
 
-from nextcord.ext import tasks
-from datetime import datetime, time, timedelta
+
+from datetime import datetime, timezone, timedelta
+import time     # ← 正確的 time 模組
+
 from zoneinfo import ZoneInfo
 
 
-TAIWAN_TZ = ZoneInfo("Asia/Taipei")
+# ===== 時區設定 =====
+TAIPEI_TZ = timezone(timedelta(hours=8))
 
 
 # ===============================
 # 🎯 每天早上 8:00 自動執行
 # ===============================
-@tasks.loop(minutes=1)
+# ===== 每日任務 =====
+
+from nextcord.ext import tasks
+
+@tasks.loop(hours=24)
 async def daily_job_task():
-    now = datetime.now(TAIWAN_TZ).time()
-    target = time(hour=8, minute=0)
+    print("🟡 Daily Job 正在執行…")
 
-    # 只在 08:00 這分鐘執行一次
-    if now.hour == target.hour and now.minute == target.minute:
-        print("🟢 Daily Job 執行！")
+    channel = bot.get_channel(你的頻道ID)  # ← 記得填
+    if channel is None:
+        print("❌ 找不到每日訊息頻道")
+        return
 
-        channel_id = 你的每日訊息頻道ID
-        channel = bot.get_channel(channel_id)
+    msg = get_today_message()
+    if msg:
+        await channel.send(msg)
+    else:
+        print("（今日沒有每日訊息）")
 
-        if channel:
-            await channel.send("📢 每日訊息來囉！")
-        else:
-            print("❌ 找不到每日訊息頻道")
 
-# --------- 確保 bot ready 後才啟動 ----------
 @daily_job_task.before_loop
-async def before_daily_task():
-    print("⏳ Daily Job 等待 Bot 啟動…")
+async def before_daily_job():
+    print("⏳ Daily Job 等待 Bot 準備完成…")
     await bot.wait_until_ready()
-    print("✅ Daily Job 已啟動！")
+    print("✅ Daily Job 已開始")
 
 
-# --------- on_ready 還是保留（但不要在裡面手動 start）----------
 @bot.event
 async def on_ready():
-    print(f"🌟 Bot 已啟動：{bot.user}")
+    print(f"🤖 Bot 已啟動：{bot.user}")
+    if not daily_job_task.is_running():
+        daily_job_task.start()
 
 
 
-# ===== 時區設定 =====
-from datetime import datetime, timedelta, timezone
-TAIPEI_TZ = timezone(timedelta(hours=8))
+
+
 
 
 
@@ -1977,7 +1984,61 @@ async def cmd_next_round(inter: Interaction):
         value="閒家請重新用 `/下注` 下本輪的賭注，莊家之後用 `/莊家骰` 開局。",
         inline=False,
     )
+                     # ===（續前面）===
+        embed.add_field(
+            name="結算結果",
+            value=f"莊家對所有已下注的閒家輸出 **1 倍**，總共付出 {total_delta} 點。",
+            inline=False,
+        )
+        if finished:
+            embed.add_field(name="對局狀態", value=msg, inline=False)
+        else:
+            embed.add_field(
+                name="下一步",
+                value="莊家已輪換，閒家可以重新 `/下注` 進入下一輪。",
+                inline=False,
+            )
+
+        await inter.response.send_message(embed=embed)
+        return
+
+    # ---- 莊家一般情況（可能點數 / 豹子） ----
+    # 定型：若已經是點數型（point / triple / 456），或已達三次
+    if info["type"] != "none" or data["dealer_rolls"] >= 3:
+        data["status"] = "player_rolling"
+        save_gamble_state(data)
+
+        embed = nextcord.Embed(title="🎲 莊家擲骰（定型）", color=0x2f3136)
+        embed.add_field(
+            name="莊家骰子",
+            value=f"{dice_str}\n{hand_name(info)}",
+            inline=False,
+        )
+        embed.add_field(
+            name="提示",
+            value="莊家已定型，所有已下注的閒家請使用 `/閒家骰`（最多三次）。",
+            inline=False,
+        )
+
+        await inter.response.send_message(embed=embed)
+        return
+
+    # ---- 無點但還能繼續骰 ----
+    save_gamble_state(data)
+    embed = nextcord.Embed(title="🎲 莊家擲骰", color=0x2f3136)
+    embed.add_field(name="莊家骰子", value=f"{dice_str}", inline=False)
+    embed.add_field(
+        name="已擲次數",
+        value=f"{data['dealer_rolls']} / 3",
+        inline=True,
+    )
+    embed.add_field(
+        name="提示",
+        value="目前是無點，可以再使用 `/莊家骰` 嘗試下一次（三次制）。",
+        inline=False,
+    )
     await inter.response.send_message(embed=embed)
+
 
 
 @bot.slash_command(name="結束賭局", description="強制結束本場對局並重設點數（保留戰績）。")
