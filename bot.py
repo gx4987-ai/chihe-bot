@@ -96,12 +96,6 @@ async def on_ready():
     if not daily_job_task.is_running():
         daily_job_task.start()
 
-from datetime import datetime, timedelta, timezone
-
-# ===== 台北時區 =====
-TAIPEI_TZ = timezone(timedelta(hours=8))
-
-
     # 同步 slash 指令
     try:
         synced = await bot.sync_application_commands()
@@ -109,6 +103,10 @@ TAIPEI_TZ = timezone(timedelta(hours=8))
     except Exception as e:
         print("❌ 同步指令時發生錯誤:", e)
 
+
+# ===== 時區設定 =====
+from datetime import datetime, timedelta, timezone
+TAIPEI_TZ = timezone(timedelta(hours=8))
 
 
 # ================================
@@ -122,6 +120,7 @@ import nextcord
 from nextcord import Interaction, SlashOption
 
 GAMBLE_FILE = "gamble_data.json"
+
 
 def load_gamble():
     if not os.path.exists(GAMBLE_FILE):
@@ -138,62 +137,6 @@ def load_gamble():
                 "banker_info": None,
             },
         }
-    with open(GAMBLE_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_gamble(data):
-    with open(GAMBLE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-# --- 骰子表情 ---
-dice_emoji = {i: f"🎲{i}" for i in range(1, 7)}
-
-def roll3():
-    return [random.randint(1, 6) for _ in range(3)]
-
-def classify(d):
-    """將骰子分類"""
-    s = sorted(d)
-
-    if s == [4, 5, 6]:
-        return {"type": "456", "value": 999}
-    if s == [1, 2, 3]:
-        return {"type": "123", "value": -1}
-
-    if d[0] == d[1] == d[2]:
-        return {"type": "all", "value": d[0]}
-
-    if d[0] == d[1]:
-        return {"type": "pair", "value": d[2]}
-    if d[0] == d[2]:
-        return {"type": "pair", "value": d[1]}
-    if d[1] == d[2]:
-        return {"type": "pair", "value": d[0]}
-
-    # 無點：給 3 次補骰機會
-    for _ in range(3):
-        nd = roll3()
-        if nd[0] == nd[1] or nd[0] == nd[2] or nd[1] == nd[2]:
-            return classify(nd)
-    return {"type": "none", "value": 0}
-
-
-
-
-# Discord Token
-TOKEN = os.getenv("DISCORD_TOKEN")
-
-
-# ============================================
-
-from datetime import datetime, timedelta, timezone
-
-TAIWAN_TZ = timezone(timedelta(hours=8))
-
-def is_night_mode():
-    now = datetime.now(TAIWAN_TZ)
-    return (now.hour >= 23 or now.hour < 3)
-
 
 # ====== 頻道設定 ======
 # 每日固定訊息要發的頻道
