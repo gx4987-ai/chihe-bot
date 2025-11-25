@@ -928,6 +928,29 @@ async def bet(inter: Interaction, amount: int = SlashOption(description="下注�
         embed = build_rolling_embed(data)
         await inter.followup.send(embed=embed, view=GambleRollView())
 
+def build_rolling_embed(data):
+    embed = nextcord.Embed(title="🎲 擲骰結果", color=0x3498db)
+
+    # 玩家
+    for uid, dice in data["round"]["player_rolls"].items():
+        name = data["round"]["player_infos"].get(uid, "玩家")
+        embed.add_field(
+            name=name,
+            value=" ".join(f"🎲{d}" for d in dice),
+            inline=False
+        )
+
+    # 莊家
+    if data["round"]["banker_roll"]:
+        embed.add_field(
+            name=f"👑 莊家 {data['round']['banker_info']}",
+            value=" ".join(f"🎲{d}" for d in data["round"]["banker_roll"]),
+            inline=False
+        )
+
+    return embed
+
+
 @bot.slash_command(name="擲骰", description="玩家擲三顆骰子")
 async def roll_dice(inter: Interaction):
     data = load_gamble()
