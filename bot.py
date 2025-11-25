@@ -140,8 +140,8 @@ def load_gamble():
             "round": {
                 "player_rolls": {},
                 "player_infos": {},
-                "banker_roll": None,
-                "banker_info": None,
+                "banker_roll": Null,
+                "banker_info": Null,
             },
         }
         save_gamble(data)
@@ -650,8 +650,8 @@ def reset_round(data):
     data["round"] = {
         "player_rolls": {},
         "player_infos": {},
-        "banker_roll": None,
-        "banker_info": None,
+        "banker_roll": Null,
+        "banker_info": Null,
     }
 
 def force_end_if_last_player(data):
@@ -961,19 +961,25 @@ async def roll_dice(inter: Interaction):
         await inter.response.send_message("❌ 你還沒有下注，不能擲骰！", ephemeral=True)
         return
 
-    # 判斷是否已擲過
+    # 確認莊家已經先擲
+    if data["round"]["banker_roll"] is None:
+        await inter.response.send_message("⚠️ 等莊家先擲完骰才能輪到你喔！", ephemeral=True)
+        return
+
+    # 防止重複擲骰
     if uid in data["round"]["player_rolls"]:
         await inter.response.send_message("❌ 你已經擲過骰子了！", ephemeral=True)
         return
 
-    dice = [random.randint(1, 6) for _ in range(3)]
-    data["round"]["player_rolls"][uid] = dice
+    # ✅ 擲三顆骰子
+    d = [random.randint(1, 6) for _ in range(3)]
+    data["round"]["player_rolls"][uid] = d
     data["round"]["player_infos"][uid] = inter.user.display_name
 
     save_gamble(data)
 
     await inter.response.send_message(
-        f"🎲 你擲出了：{' '.join(f'[{d}]' for d in dice)}"
+        f"🎲 你擲出了：{' '.join(f'[{x}]' for x in d)}"
     )
 
 @bot.slash_command(name="莊家擲骰", description="莊家擲三顆骰子")
