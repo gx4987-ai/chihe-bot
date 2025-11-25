@@ -312,6 +312,9 @@ STORY_CURRENT_INDEX: Dict[int, int] = {}
 MEMORY_FILE = "chihye_memory.json"
 MEMORY: Dict[str, dict] = {}  # 結構：{"users": {"user_id_str": {"notes": [...], "updated_at": "..."} }}
 
+# ===== 夜間模式（目前關閉，避免錯誤） =====
+def is_night_mode():
+    return False
 
 def load_memory() -> None:
     """啟動時讀取記憶檔，讀不到就用空的。"""
