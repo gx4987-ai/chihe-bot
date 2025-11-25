@@ -1953,18 +1953,18 @@ async def cmd_next_round(inter: Interaction):
         await inter.response.send_message("只有莊家可以結束本輪並進入下一輪。")
         return
 
-    # 對於有下注但完全沒擲骰的閒家 → 當作輸一倍
+    # 對尚未擲骰的閒家：視為輸一倍
     for uid, bet in list(data["current_bets"].items()):
         if uid not in data["player_hands"]:
             p = data["players"].get(uid)
-            if not p:
-                continue
-            p["points"] -= bet
-            if p["points"] < 0:
-                p["points"] = 0
-            p["lose"] += 1
-            data["players"][dealer_uid]["win"] += 1
+            if p:
+                p["points"] -= bet
+                if p["points"] < 0:
+                    p["points"] = 0
+                p["lose"] += 1
+                data["players"][dealer_uid]["win"] += 1
 
+    # 清除本輪資料
     data["current_bets"] = {}
     data["dealer_hand"] = None
     data["player_hands"] = {}
@@ -1974,16 +1974,24 @@ async def cmd_next_round(inter: Interaction):
     finished, msg = rotate_and_cleanup_for_next_round(data)
 
     if finished:
-        embed = nextcord.Embed(title="🏁 對局結束", description=msg, color=0xF5B642)
+        embed = nextcord.Embed(
+            title="🏁 對局結束",
+            description=msg,
+            color=0xF5B642
+        )
         await inter.response.send_message(embed=embed)
         return
 
+    # 還沒結束 → 進入下一輪
     embed = build_table_embed(data, title="🔄 進入下一輪")
     embed.add_field(
         name="提示",
-        value="閒家請重新用 `/下注` 下本輪的賭注，莊家之後用 `/莊家骰` 開局。",
-        inline=False,
+        value="閒家請使用 `/下注` 下本輪賭注，莊家之後用 `/莊家骰` 開局。",
+        inline=False
     )
+
+    await inter.response.send_message(embed=embed)
+
                      # ===（續前面）===
         embed.add_field(
             name="結算結果",
