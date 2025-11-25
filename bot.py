@@ -928,6 +928,57 @@ async def bet(inter: Interaction, amount: int = SlashOption(description="下注�
         embed = build_rolling_embed(data)
         await inter.followup.send(embed=embed, view=GambleRollView())
 
+@bot.slash_command(name="擲骰", description="玩家擲三顆骰子")
+async def roll_dice(inter: Interaction):
+    data = load_gamble()
+    uid = str(inter.user.id)
+
+    # 必須已經下注才可擲骰
+    if uid not in data["bets"]:
+        await inter.response.send_message("❌ 你還沒有下注，不能擲骰！", ephemeral=True)
+        return
+
+    # 已擲過骰不能重擲
+    if uid in data["round"]["player_rolls"]:
+        await inter.response.send_message("❌ 你已經擲過骰子了！", ephemeral=True)
+        return
+
+    # 擲骰
+    dice = [random.randint(1, 6) for _ in range(3)]
+    data["round"]["player_rolls"][uid] = dice
+    data["round"]["player_infos"][uid] = inter.user.display_name
+
+    save_gamble(data)
+
+    await inter.response.send_message(
+        f"🎲 你擲出了：{' '.join(f'[{d}]' for d in dice)}"
+    )
+
+@bot.slash_command(name="莊家擲骰", description="莊家擲三顆骰子")
+async def banker_roll(inter: Interaction):
+    data = load_gamble()
+    banker = get_bank_uid := data["order"][data["banker_index"]]
+
+    if str(inter.user.id) != banker:
+        await inter.response.send_message("❌ 你不是莊家，不能擲骰。", ephemeral=True)
+        return
+
+    if data["round"]["banker_roll"] is not None:
+        await inter.response.send_message("❌ 莊家已經擲過骰了！", ephemeral=True)
+        return
+
+    dice = [random.randint(1, 6) for _ in range(3)]
+    data["round"]["banker_roll"] = dice
+    data["round"]["banker_info"] = inter.user.display_name
+
+    save_gamble(data)
+
+    await inter.response.send_message(
+        f"👑 莊家擲出了：{' '.join(f'[{d}]' for d in dice)}"
+    )
+
+
+
 
 @bot.slash_command(name="結束賭局", description="強制重置賭局（管理者）")
 async def end_game(inter: Interaction):
