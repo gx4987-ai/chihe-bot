@@ -956,17 +956,16 @@ async def roll_dice(inter: Interaction):
     data = load_gamble()
     uid = str(inter.user.id)
 
-    # 必須已經下注才可擲骰
+    # 必須下注後才能擲骰
     if uid not in data["bets"]:
         await inter.response.send_message("❌ 你還沒有下注，不能擲骰！", ephemeral=True)
         return
 
-    # 已擲過骰不能重擲
+    # 判斷是否已擲過
     if uid in data["round"]["player_rolls"]:
         await inter.response.send_message("❌ 你已經擲過骰子了！", ephemeral=True)
         return
 
-    # 擲骰
     dice = [random.randint(1, 6) for _ in range(3)]
     data["round"]["player_rolls"][uid] = dice
     data["round"]["player_infos"][uid] = inter.user.display_name
@@ -980,7 +979,9 @@ async def roll_dice(inter: Interaction):
 @bot.slash_command(name="莊家擲骰", description="莊家擲三顆骰子")
 async def banker_roll(inter: Interaction):
     data = load_gamble()
-    banker = get_bank_uid := data["order"][data["banker_index"]]
+
+    # 正確：取得莊家 ID（不使用 :=）
+    banker = data["order"][data["banker_index"]]
 
     if str(inter.user.id) != banker:
         await inter.response.send_message("❌ 你不是莊家，不能擲骰。", ephemeral=True)
@@ -999,8 +1000,6 @@ async def banker_roll(inter: Interaction):
     await inter.response.send_message(
         f"👑 莊家擲出了：{' '.join(f'[{d}]' for d in dice)}"
     )
-
-
 
 
 @bot.slash_command(name="結束賭局", description="強制重置賭局（管理者）")
