@@ -735,7 +735,7 @@ class GambleRollView(nextcord.ui.View):
         if uid in data["round"]["player_rolls"]:
             return await inter.response.send_message("你已經擲過骰。", ephemeral=True)
 
-        d = roll3()
+        d = [random.randint(1, 6) for _ in range(3)]
         info = classify(d)
         data["round"]["player_rolls"][uid] = d
         data["round"]["player_infos"][uid] = info
