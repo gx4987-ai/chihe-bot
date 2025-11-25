@@ -5,9 +5,9 @@
     "bets": {},
     "stage": "idle",
     "round": {
-    "player_rolls": {},
-    "player_infos": {},
-    "banker_roll": None,
-    "banker_info": None,
-}
+        "player_rolls": {},
+        "player_infos": {},
+        "banker_roll": null,
+        "banker_info": null
+    }
 }
